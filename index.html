@@ -1,0 +1,1214 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full bg-slate-900 text-slate-100">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="theme-color" content="#0f172a">
+  <meta name="description" content="Mobile-first Focus Block Planner PWA for structured workdays">
+  <title>Focus Block Planner</title>
+  
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              50: '#f0f9ff',
+              100: '#e0f2fe',
+              400: '#38bdf8',
+              500: '#0ea5e9',
+              600: '#0284c7',
+              700: '#0369a1',
+            }
+          }
+        }
+      }
+    }
+  </script>
+
+  <style>
+    /* Touch optimization and smooth scrolling */
+    * {
+      -webkit-tap-highlight-color: transparent;
+      user-select: none;
+    }
+    input, textarea {
+      user-select: text;
+    }
+    /* Custom scrollbar */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: rgba(15, 23, 42, 0.6);
+    }
+    ::-webkit-scrollbar-thumb {
+      background: rgba(51, 65, 85, 0.8);
+      border-radius: 9999px;
+    }
+    .draggable-ghost {
+      opacity: 0.4;
+      border: 2px dashed #38bdf8;
+    }
+  </style>
+</head>
+<body class="h-full flex flex-col overflow-hidden font-sans antialiased select-none bg-slate-900 text-slate-100">
+  <!-- PWA Install Banner -->
+  <div id="pwa-install-banner" class="hidden bg-brand-600 text-white px-4 py-2.5 flex items-center justify-between shadow-lg z-50 text-sm">
+    <div class="flex items-center gap-2">
+      <i data-lucide="download" class="w-4 h-4"></i>
+      <span>Install <b>Focus Planner</b> app for offline access</span>
+    </div>
+    <div class="flex items-center gap-2">
+      <button id="pwa-install-btn" class="bg-white text-brand-700 px-3 py-1 rounded-md font-semibold text-xs shadow-sm hover:bg-slate-100 transition">Install</button>
+      <button id="pwa-dismiss-btn" class="p-1 hover:bg-brand-700 rounded-md transition"><i data-lucide="x" class="w-4 h-4"></i></button>
+    </div>
+  </div>
+
+  <!-- Main Header -->
+  <header class="bg-slate-800/80 backdrop-blur border-b border-slate-700/60 px-4 py-3 flex items-center justify-between shrink-0">
+    <div class="flex items-center gap-2.5">
+      <div class="bg-gradient-to-tr from-brand-600 to-indigo-500 p-2 rounded-xl text-white shadow-md">
+        <i data-lucide="clock" class="w-5 h-5"></i>
+      </div>
+      <div>
+        <h1 class="font-bold text-base tracking-tight text-white flex items-center gap-2">
+          Focus Planner
+          <span id="header-day-tag" class="text-[10px] font-medium bg-brand-500/20 text-brand-400 px-2 py-0.5 rounded-full border border-brand-500/30">MON</span>
+        </h1>
+        <p id="header-date-text" class="text-xs text-slate-400">Loading date...</p>
+      </div>
+    </div>
+    
+    <div class="flex items-center gap-1.5">
+      <button id="btn-add-quick-task" class="flex items-center gap-1 bg-brand-600 hover:bg-brand-500 text-white text-xs font-semibold px-3 py-2 rounded-lg transition shadow-sm active:scale-95">
+        <i data-lucide="plus" class="w-4 h-4"></i>
+        <span>Add Task</span>
+      </button>
+      <button id="btn-[reset]-data" title="Reset sample data" class="p-2 text-slate-400 hover:text-slate-200 hover:bg-slate-700/50 rounded-lg transition">
+        <i data-lucide="rotate-ccw" class="w-4 h-4"></i>
+      </button>
+    </div>
+  </header>
+
+  <!-- Non-Workday Notice Banner -->
+  <div id="non-workday-banner" class="hidden bg-amber-500/10 border-b border-amber-500/20 text-amber-300 px-4 py-2 text-xs flex items-center justify-between">
+    <span class="flex items-center gap-1.5">
+      <i data-lucide="alert-circle" class="w-4 h-4 text-amber-400 shrink-0"></i>
+      <span id="non-workday-text">Today is not a standard scheduled workday (Mon, Wed, Fri). Viewing upcoming day.</span>
+    </span>
+    <button id="btn-jump-today" class="text-xs bg-amber-500/20 hover:bg-amber-500/30 text-amber-200 px-2 py-0.5 rounded border border-amber-500/30 underline font-medium">View Next</button>
+  </div>
+
+  <!-- Content Containers (Tab Screens) -->
+  <main class="flex-1 overflow-y-auto relative pb-20">
+
+    <!-- TAB 1: TODAY / FOCUS VIEW -->
+    <section id="tab-today" class="tab-screen p-4 space-y-4 max-w-lg mx-auto">
+      
+      <!-- Current Live Block Hero Card -->
+      <div id="current-block-card" class="bg-gradient-to-br from-slate-800 to-slate-800/90 border border-slate-700/80 rounded-2xl p-4 shadow-xl relative overflow-hidden transition-all duration-300">
+        <div class="absolute -right-8 -top-8 w-32 h-32 bg-brand-500/10 rounded-full blur-2xl pointer-events-none"></div>
+        
+        <div class="flex items-center justify-between mb-3">
+          <div class="flex items-center gap-2">
+            <span id="live-block-badge" class="px-2.5 py-1 text-xs font-bold rounded-md bg-brand-500/20 text-brand-400 border border-brand-500/30 uppercase tracking-wider flex items-center gap-1">
+              <span class="w-2 h-2 rounded-full bg-brand-400 animate-pulse"></span>
+              Current Block
+            </span>
+            <span id="live-block-time" class="text-xs text-slate-400 font-mono">09:00 - 09:35</span>
+          </div>
+          <span id="live-timer-countdown" class="text-xs font-mono bg-slate-900/60 px-2 py-1 rounded border border-slate-700/50 text-slate-300">--:-- left</span>
+        </div>
+
+        <div id="live-task-container" class="py-2">
+          <h2 id="live-task-title" class="text-lg font-bold text-white tracking-tight leading-snug">No Task Assigned</h2>
+          <p id="live-task-subtitle" class="text-xs text-slate-400 mt-1">Select a task or add one to start focusing.</p>
+        </div>
+
+        <div class="mt-3 pt-3 border-t border-slate-700/50 flex items-center justify-between">
+          <div class="flex items-center gap-2" id="live-task-type-tag">
+            <span class="text-[10px] text-slate-400 bg-slate-700/50 px-2 py-0.5 rounded">Block #1</span>
+          </div>
+          <button id="btn-complete-live-task" class="bg-emerald-600 hover:bg-emerald-500 text-white font-medium text-xs px-3.5 py-1.5 rounded-lg flex items-center gap-1.5 shadow duration-150 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed">
+            <i data-lucide="check-circle-2" class="w-4 h-4"></i>
+            <span>Mark Complete</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Upcoming Blocks Schedule List -->
+      <div class="space-y-2">
+        <div class="flex items-center justify-between px-1">
+          <h3 class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Today's Focus & Break Timeline</h3>
+          <span id="timeline-progress-count" class="text-[11px] text-slate-500">0/0 Done</span>
+        </div>
+
+        <div id="today-blocks-list" class="space-y-2">
+          <!-- Dynamic Blocks Generated Here -->
+        </div>
+      </div>
+
+      <!-- Carried Over & Unassigned Backlog Section -->
+      <div id="unassigned-backlog-container" class="space-y-2 pt-2 hidden">
+        <div class="flex items-center justify-between px-1">
+          <h3 class="text-xs font-semibold text-amber-400/90 uppercase tracking-wider flex items-center gap-1">
+            <i data-lucide="arrow-right-left" class="w-3.5 h-3.5"></i>
+            <span>Overflow & Carried Tasks</span>
+          </h3>
+          <span class="text-[11px] text-slate-400">Drag or tap to assign</span>
+        </div>
+        <div id="unassigned-task-list" class="space-y-2">
+          <!-- Overflow tasks -->
+        </div>
+      </div>
+
+      <!-- Completed Today Collapse View -->
+      <div id="completed-today-section" class="pt-2">
+        <button id="btn-toggle-completed-today" class="w-full flex items-center justify-between py-2 px-3 bg-slate-800/40 hover:bg-slate-800/80 rounded-xl text-xs text-slate-400 transition border border-slate-700/40">
+          <span class="flex items-center gap-2">
+            <i data-lucide="check-square" class="w-4 h-4 text-emerald-400"></i>
+            <span class="font-medium text-slate-300">Completed Today</span>
+            <span id="completed-today-count" class="bg-emerald-500/20 text-emerald-400 px-1.5 py-0.2 rounded-full text-[10px]">0</span>
+          </span>
+          <i id="icon-chevron-completed" data-lucide="chevron-down" class="w-4 h-4 transition-transform duration-200"></i>
+        </button>
+
+        <div id="completed-today-list" class="mt-2 space-y-1.5 hidden">
+          <!-- Dynamic Completed Items -->
+        </div>
+      </div>
+
+    </section>
+
+    <!-- TAB 2: PLAN / SCHEDULE VIEW -->
+    <section id="tab-plan" class="tab-screen hidden p-4 space-y-4 max-w-lg mx-auto">
+      <div class="flex items-center justify-between">
+        <div>
+          <h2 class="text-base font-bold text-white">Daily Schedule Editor</h2>
+          <p class="text-xs text-slate-400">Reorder tasks across 35-min focus blocks & 15-min breaks</p>
+        </div>
+        <button id="btn-add-oneoff-plan" class="text-xs bg-slate-800 hover:bg-slate-700 text-brand-400 border border-brand-500/30 px-3 py-1.5 rounded-lg flex items-center gap-1">
+          <i data-lucide="plus-circle" class="w-3.5 h-3.5"></i>
+          <span>Add Task</span>
+        </button>
+      </div>
+
+      <!-- Drag & Drop Instructions -->
+      <div class="bg-slate-800/40 border border-slate-700/50 rounded-xl p-3 text-xs text-slate-300 flex items-start gap-2">
+        <i data-lucide="grip-vertical" class="w-4 h-4 text-brand-400 shrink-0 mt-0.5"></i>
+        <span>Use arrow buttons or edit input fields directly to assign tasks to 35m work blocks or 15m break slots.</span>
+      </div>
+
+      <!-- Editable Block List -->
+      <div id="editor-blocks-list" class="space-y-2.5">
+        <!-- Dynamic Interactive Blocks -->
+      </div>
+    </section>
+
+    <!-- TAB 3: TEMPLATES VIEW -->
+    <section id="tab-templates" class="tab-screen hidden p-4 space-y-4 max-w-lg mx-auto">
+      <div>
+        <h2 class="text-base font-bold text-white">Recurring Workday Templates</h2>
+        <p class="text-xs text-slate-400">Define tasks for 35m focus blocks and 15m break intervals.</p>
+      </div>
+
+      <!-- Day Switcher Tabs -->
+      <div class="flex bg-slate-800 p-1 rounded-xl border border-slate-700/60">
+        <button data-template-day="mon" class="btn-template-tab flex-1 py-1.5 text-xs font-semibold rounded-lg text-slate-400 transition active">Monday</button>
+        <button data-template-day="wed" class="btn-template-tab flex-1 py-1.5 text-xs font-semibold rounded-lg text-slate-400 transition">Wednesday</button>
+        <button data-template-day="fri" class="btn-template-tab flex-1 py-1.5 text-xs font-semibold rounded-lg text-slate-400 transition">Friday</button>
+      </div>
+
+      <!-- Selected Template Card List -->
+      <div class="bg-slate-800/60 border border-slate-700/80 rounded-2xl p-3.5 space-y-3">
+        <div class="flex items-center justify-between pb-2 border-b border-slate-700/60">
+          <span id="template-day-heading" class="text-xs font-bold text-slate-200 uppercase tracking-wider">Monday Focus & Break Slots</span>
+          <span id="template-time-range" class="text-[11px] text-slate-400">09:00 - 13:45</span>
+        </div>
+
+        <div id="template-slots-list" class="space-y-2">
+          <!-- Dynamic Template Slot Inputs -->
+        </div>
+      </div>
+    </section>
+
+    <!-- TAB 4: COMPLETED LOG ARCHIVE VIEW -->
+    <section id="tab-completed" class="tab-screen hidden p-4 space-y-4 max-w-lg mx-auto">
+      <div class="flex items-center justify-between">
+        <div>
+          <h2 class="text-base font-bold text-white">Completed History</h2>
+          <p class="text-xs text-slate-400">Archive log of all completed focus tasks</p>
+        </div>
+        <button id="btn-clear-history" class="text-xs text-rose-400 hover:text-rose-300 hover:bg-rose-500/10 px-2.5 py-1 rounded border border-rose-500/20 transition">
+          Clear History
+        </button>
+      </div>
+
+      <div id="completed-archive-list" class="space-y-3">
+        <!-- Dynamic Completed Archive Grouped by Date -->
+      </div>
+    </section>
+
+  </main>
+
+  <!-- Navigation Bar -->
+  <nav class="fixed bottom-0 left-0 right-0 bg-slate-900/95 backdrop-blur-md border-t border-slate-800 px-2 py-2 z-40">
+    <div class="max-w-lg mx-auto flex justify-around items-center">
+      
+      <button data-tab="tab-today" class="nav-item flex flex-col items-center gap-1 text-brand-400 transition px-3 py-1 rounded-xl">
+        <i data-lucide="target" class="w-5 h-5"></i>
+        <span class="text-[10px] font-medium">Today</span>
+      </button>
+
+      <button data-tab="tab-plan" class="nav-item flex flex-col items-center gap-1 text-slate-400 hover:text-slate-200 transition px-3 py-1 rounded-xl">
+        <i data-lucide="calendar" class="w-5 h-5"></i>
+        <span class="text-[10px] font-medium">Plan</span>
+      </button>
+
+      <button data-tab="tab-templates" class="nav-item flex flex-col items-center gap-1 text-slate-400 hover:text-slate-200 transition px-3 py-1 rounded-xl">
+        <i data-lucide="sliders" class="w-5 h-5"></i>
+        <span class="text-[10px] font-medium">Templates</span>
+      </button>
+
+      <button data-tab="tab-completed" class="nav-item flex flex-col items-center gap-1 text-slate-400 hover:text-slate-200 transition px-3 py-1 rounded-xl">
+        <i data-lucide="check-circle" class="w-5 h-5"></i>
+        <span class="text-[10px] font-medium">Completed</span>
+      </button>
+
+    </div>
+  </nav>
+
+  <!-- Modal: Add Task -->
+  <div id="modal-add-task" class="fixed inset-0 bg-slate-950/70 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 hidden">
+    <div class="bg-slate-800 border border-slate-700 w-full max-w-md rounded-t-2xl sm:rounded-2xl p-5 space-y-4 animate-in slide-in-from-bottom duration-200">
+      <div class="flex items-center justify-between">
+        <h3 class="text-base font-bold text-white flex items-center gap-2">
+          <i data-lucide="plus-circle" class="w-5 h-5 text-brand-400"></i>
+          <span>Add Task</span>
+        </h3>
+        <button id="btn-close-modal" class="text-slate-400 hover:text-white p-1 rounded-lg">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <div class="space-y-3">
+        <div>
+          <label class="block text-xs text-slate-400 mb-1">Task Name</label>
+          <input type="text" id="input-task-title" placeholder="e.g. Prepare Quarterly Report" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-brand-500 transition">
+        </div>
+
+        <div>
+          <label class="block text-xs text-slate-400 mb-1">Assign to Block Slot</label>
+          <select id="select-task-block" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-brand-500 transition">
+            <!-- Dynamic Options -->
+          </select>
+        </div>
+      </div>
+
+      <div class="flex justify-end gap-2 pt-2">
+        <button id="btn-cancel-modal" class="px-4 py-2 rounded-xl text-xs font-semibold text-slate-400 hover:bg-slate-700 transition">Cancel</button>
+        <button id="btn-save-task" class="px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white rounded-xl text-xs font-semibold shadow transition">Save Task</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- JavaScript Logic -->
+  <script>
+    // --- DATA SPECIFICATION & CONSTANTS ---
+    // Includes both 35m Focus Blocks and 15m Break Slots
+    const SCHEDULE_DEFINITIONS = {
+      mon: [
+        { start: "09:00", end: "09:35", label: "09:00 - 09:35", duration: 35, type: "focus" },
+        { start: "09:35", end: "09:50", label: "09:35 - 09:50", duration: 15, type: "break" },
+        { start: "09:50", end: "10:25", label: "09:50 - 10:25", duration: 35, type: "focus" },
+        { start: "10:25", end: "10:40", label: "10:25 - 10:40", duration: 15, type: "break" },
+        { start: "10:40", end: "11:15", label: "10:40 - 11:15", duration: 35, type: "focus" },
+        { start: "11:15", end: "11:30", label: "11:15 - 11:30", duration: 15, type: "break" },
+        { start: "11:30", end: "12:05", label: "11:30 - 12:05", duration: 35, type: "focus" },
+        { start: "12:05", end: "12:20", label: "12:05 - 12:20", duration: 15, type: "break" },
+        { start: "12:20", end: "12:55", label: "12:20 - 12:55", duration: 35, type: "focus" },
+        { start: "12:55", end: "13:10", label: "12:55 - 13:10", duration: 15, type: "break" },
+        { start: "13:10", end: "13:45", label: "13:10 - 13:45", duration: 35, type: "focus" }
+      ],
+      wed: [
+        { start: "09:00", end: "09:35", label: "09:00 - 09:35", duration: 35, type: "focus" },
+        { start: "09:35", end: "09:50", label: "09:35 - 09:50", duration: 15, type: "break" },
+        { start: "09:50", end: "10:25", label: "09:50 - 10:25", duration: 35, type: "focus" },
+        { start: "10:25", end: "10:40", label: "10:25 - 10:40", duration: 15, type: "break" },
+        { start: "10:40", end: "11:15", label: "10:40 - 11:15", duration: 35, type: "focus" },
+        { start: "11:15", end: "11:30", label: "11:15 - 11:30", duration: 15, type: "break" },
+        { start: "11:30", end: "12:05", label: "11:30 - 12:05", duration: 35, type: "focus" },
+        { start: "12:05", end: "12:20", label: "12:05 - 12:20", duration: 15, type: "break" },
+        { start: "12:20", end: "12:55", label: "12:20 - 12:55", duration: 35, type: "focus" },
+        { start: "12:55", end: "13:10", label: "12:55 - 13:10", duration: 15, type: "break" },
+        { start: "13:10", end: "13:45", label: "13:10 - 13:45", duration: 35, type: "focus" },
+        { start: "13:45", end: "14:00", label: "13:45 - 14:00", duration: 15, type: "break" },
+        { start: "14:00", end: "14:35", label: "14:00 - 14:35", duration: 35, type: "focus" },
+        { start: "14:35", end: "14:50", label: "14:35 - 14:50", duration: 15, type: "break" },
+        { start: "14:50", end: "15:25", label: "14:50 - 15:25", duration: 35, type: "focus" },
+        { start: "15:25", end: "15:40", label: "15:25 - 15:40", duration: 15, type: "break" },
+        { start: "15:40", end: "16:15", label: "15:40 - 16:15", duration: 35, type: "focus" }
+      ],
+      fri: [
+        { start: "09:00", end: "09:35", label: "09:00 - 09:35", duration: 35, type: "focus" },
+        { start: "09:35", end: "09:50", label: "09:35 - 09:50", duration: 15, type: "break" },
+        { start: "09:50", end: "10:25", label: "09:50 - 10:25", duration: 35, type: "focus" },
+        { start: "10:25", end: "10:40", label: "10:25 - 10:40", duration: 15, type: "break" },
+        { start: "10:40", end: "11:15", label: "10:40 - 11:15", duration: 35, type: "focus" },
+        { start: "11:15", end: "11:30", label: "11:15 - 11:30", duration: 15, type: "break" },
+        { start: "11:30", end: "12:05", label: "11:30 - 12:05", duration: 35, type: "focus" },
+        { start: "12:05", end: "12:20", label: "12:05 - 12:20", duration: 15, type: "break" },
+        { start: "12:20", end: "12:55", label: "12:20 - 12:55", duration: 35, type: "focus" },
+        { start: "12:55", end: "13:10", label: "12:55 - 13:10", duration: 15, type: "break" },
+        { start: "13:10", end: "13:45", label: "13:10 - 13:45", duration: 35, type: "focus" },
+        { start: "13:45", end: "14:00", label: "13:45 - 14:00", duration: 15, type: "break" },
+        { start: "14:00", end: "14:35", label: "14:00 - 14:35", duration: 35, type: "focus" },
+        { start: "14:35", end: "14:50", label: "14:35 - 14:50", duration: 15, type: "break" },
+        { start: "14:50", end: "15:25", label: "14:50 - 15:25", duration: 35, type: "focus" },
+        { start: "15:25", end: "15:40", label: "15:25 - 15:40", duration: 15, type: "break" },
+        { start: "15:40", end: "16:15", label: "15:40 - 16:15", duration: 35, type: "focus" }
+      ]
+    };
+
+    const DEFAULT_TEMPLATES = {
+      mon: [
+        "Weekly Planning & Review", "Quick Hydration & Stretch",
+        "Documentation & Logs", "Inbox Clearing",
+        "Administration & Emails", "Walk & Coffee Break",
+        "Team Sync & Standup", "Quick Check-in / Notes",
+        "Architecture & Specs", "Mindful Breathing",
+        "Weekly Retrospective"
+      ],
+      wed: [
+        "Deep Focus Core Feature", "Short Rest",
+        "Deep Focus Core Feature", "Stretch & Coffee",
+        "Code Review & Pull Requests", "Quick Break",
+        "Database Maintenance", "Hydration Break",
+        "System Refactoring", "Walk Outside",
+        "Bug Fixing Session", "Tea Break",
+        "Client Communication", "Quick Reset",
+        "Testing & QA", "Pre-wrap Stretch",
+        "Learning & Research"
+      ],
+      fri: [
+        "Weekly Release Build", "Short Rest",
+        "Deployment & Monitoring", "Coffee Break",
+        "Performance Tuning", "Quick Break",
+        "Security Sweep", "Hydration",
+        "Documentation Updates", "Walk Break",
+        "Refactoring Backlog", "Tea Break",
+        "Tech Debt Review", "Quick Stretch",
+        "Team Knowledge Sharing", "Final Review Notes",
+        "Next Week Prep"
+      ]
+    };
+
+    // State Variables
+    let appState = {
+      templates: JSON.parse(JSON.stringify(DEFAULT_TEMPLATES)),
+      days: {}, // Keyed by YYYY-MM-DD
+      lastProcessedDate: null,
+      activeTemplateTab: 'mon'
+    };
+
+    let selectedViewingDateStr = getFormattedDateStr(new Date());
+
+    // --- UTILITY FUNCTIONS ---
+    function getFormattedDateStr(dateObj) {
+      const year = dateObj.getFullYear();
+      const month = String(dateObj.getMonth() + 1).padStart(2, '0');
+      const day = String(dateObj.getDate()).padStart(2, '0');
+      return `${year}-${month}-${day}`;
+    }
+
+    function parseDateStr(dateStr) {
+      const [y, m, d] = dateStr.split('-').map(Number);
+      return new Date(y, m - 1, d);
+    }
+
+    function getWorkdayType(dateObj) {
+      const dayNum = dateObj.getDay(); // 0:Sun, 1:Mon, 2:Tue, 3:Wed, 4:Thu, 5:Fri, 6:Sat
+      if (dayNum === 1) return 'mon';
+      if (dayNum === 3) return 'wed';
+      if (dayNum === 5) return 'fri';
+      return null;
+    }
+
+    function getNextWorkdayDate(fromDate) {
+      let cur = new Date(fromDate.getTime());
+      cur.setDate(cur.getDate() + 1);
+      while (!getWorkdayType(cur)) {
+        cur.setDate(cur.getDate() + 1);
+      }
+      return cur;
+    }
+
+    function getPrevWorkdayDate(fromDate) {
+      let cur = new Date(fromDate.getTime());
+      cur.setDate(cur.getDate() - 1);
+      while (!getWorkdayType(cur)) {
+        cur.setDate(cur.getDate() - 1);
+      }
+      return cur;
+    }
+
+    function generateId() {
+      return 'task_' + Math.random().toString(36).substr(2, 9);
+    }
+
+    // --- LOCAL STORAGE MANAGER ---
+    function loadState() {
+      const saved = localStorage.getItem('focus_planner_pwa_data_v1');
+      if (saved) {
+        try {
+          appState = JSON.parse(saved);
+        } catch (e) {
+          console.error("Failed to parse stored state:", e);
+        }
+      }
+    }
+
+    function saveState() {
+      localStorage.setItem('focus_planner_pwa_data_v1', JSON.stringify(appState));
+    }
+
+    // --- CARRY-OVER & SCHEDULE GENERATOR ---
+    function ensureDayInstantiated(targetDateStr) {
+      const targetDate = parseDateStr(targetDateStr);
+      const dayType = getWorkdayType(targetDate);
+
+      if (appState.days[targetDateStr]) {
+        return appState.days[targetDateStr];
+      }
+
+      if (!dayType) {
+        appState.days[targetDateStr] = {
+          date: targetDateStr,
+          dayType: null,
+          blocks: [],
+          tasks: [],
+          carryOverProcessed: true
+        };
+        saveState();
+        return appState.days[targetDateStr];
+      }
+
+      const blockDefs = SCHEDULE_DEFINITIONS[dayType];
+      const blocks = blockDefs.map((def, idx) => ({
+        index: idx,
+        startTime: def.start,
+        endTime: def.end,
+        label: def.label,
+        duration: def.duration,
+        type: def.type,
+        taskId: null
+      }));
+
+      let carriedTasks = [];
+      const prevDate = getPrevWorkdayDate(targetDate);
+      const prevDateStr = getFormattedDateStr(prevDate);
+      
+      if (appState.days[prevDateStr]) {
+        const prevDay = appState.days[prevDateStr];
+        const unfinished = prevDay.tasks.filter(t => !t.completed);
+        unfinished.forEach(task => {
+          carriedTasks.push({
+            id: generateId(),
+            title: task.title,
+            type: 'carried',
+            originDate: task.originDate || prevDateStr,
+            completed: false,
+            completedAt: null,
+            recurringDay: null,
+            blockIndex: null
+          });
+        });
+      }
+
+      const templateTasks = appState.templates[dayType] || [];
+      const todayTasks = [];
+
+      templateTasks.forEach((title, idx) => {
+        if (title && title.trim()) {
+          todayTasks.push({
+            id: generateId(),
+            title: title.trim(),
+            type: 'recurring',
+            originDate: targetDateStr,
+            completed: false,
+            completedAt: null,
+            recurringDay: dayType,
+            blockIndex: idx
+          });
+        }
+      });
+
+      const allDayTasks = [...carriedTasks, ...todayTasks];
+
+      allDayTasks.forEach((task, idx) => {
+        if (idx < blocks.length) {
+          task.blockIndex = idx;
+          blocks[idx].taskId = task.id;
+        } else {
+          task.blockIndex = null;
+        }
+      });
+
+      appState.days[targetDateStr] = {
+        date: targetDateStr,
+        dayType: dayType,
+        blocks: blocks,
+        tasks: allDayTasks,
+        carryOverProcessed: true
+      };
+
+      saveState();
+      return appState.days[targetDateStr];
+    }
+
+    // Initialize application state for today
+    function initCurrentSchedule() {
+      loadState();
+      const today = new Date();
+      const todayStr = getFormattedDateStr(today);
+      const dayType = getWorkdayType(today);
+
+      if (!dayType) {
+        // If today is weekend/non-workday, find next workday to show default schedule
+        const nextWorkday = getNextWorkdayDate(today);
+        selectedViewingDateStr = getFormattedDateStr(nextWorkday);
+        document.getElementById('non-workday-banner').classList.remove('hidden');
+        document.getElementById('non-workday-text').innerText = `Today (${today.toLocaleDateString('en-US', { weekday: 'short' })}) is not a scheduled workday. Showing next workday.`;
+      } else {
+        selectedViewingDateStr = todayStr;
+        document.getElementById('non-workday-banner').classList.add('hidden');
+      }
+
+      ensureDayInstantiated(selectedViewingDateStr);
+    }
+
+    // --- RENDER FUNCTIONS ---
+
+    function renderHeader() {
+      const curDate = parseDateStr(selectedViewingDateStr);
+      const dayType = getWorkdayType(curDate);
+      const dayTag = document.getElementById('header-day-tag');
+      const dateText = document.getElementById('header-date-text');
+
+      dayTag.innerText = dayType ? dayType.toUpperCase() : curDate.toLocaleDateString('en-US', { weekday: 'short' }).toUpperCase();
+      dateText.innerText = curDate.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric', year: 'numeric' });
+    }
+
+    function renderTodayView() {
+      const dayData = appState.days[selectedViewingDateStr];
+      if (!dayData || !dayData.dayType) {
+        document.getElementById('today-blocks-list').innerHTML = `<p class="text-xs text-slate-400 p-4 text-center">No focus blocks scheduled for non-workdays.</p>`;
+        return;
+      }
+
+      const blockDefs = SCHEDULE_DEFINITIONS[dayData.dayType];
+      const now = new Date();
+      const nowTimeStr = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
+
+      const isViewingToday = selectedViewingDateStr === getFormattedDateStr(new Date());
+      let activeBlockIndex = -1;
+
+      if (isViewingToday) {
+        blockDefs.forEach((def, idx) => {
+          if (nowTimeStr >= def.start && nowTimeStr <= def.end) {
+            activeBlockIndex = idx;
+          }
+        });
+      }
+
+      const liveBadge = document.getElementById('live-block-badge');
+      const liveTime = document.getElementById('live-block-time');
+      const liveTaskTitle = document.getElementById('live-task-title');
+      const liveTaskSub = document.getElementById('live-task-subtitle');
+      const liveTaskTypeTag = document.getElementById('live-task-type-tag');
+      const btnCompleteLive = document.getElementById('btn-complete-live-task');
+      const countdownTimer = document.getElementById('live-timer-countdown');
+
+      let currentBlock = activeBlockIndex !== -1 ? dayData.blocks[activeBlockIndex] : dayData.blocks[0];
+      if (!currentBlock && dayData.blocks.length > 0) currentBlock = dayData.blocks[0];
+
+      if (currentBlock) {
+        const currentTask = dayData.tasks.find(t => t.id === currentBlock.taskId && !t.completed);
+        liveTime.innerText = `${currentBlock.startTime} - ${currentBlock.endTime} (${currentBlock.duration}m)`;
+
+        const slotTypeName = currentBlock.type === 'break' ? '15m Break' : '35m Focus Block';
+
+        if (activeBlockIndex !== -1) {
+          liveBadge.innerHTML = `<span class="w-2 h-2 rounded-full ${currentBlock.type === 'break' ? 'bg-amber-400' : 'bg-emerald-400'} animate-pulse"></span> Active ${slotTypeName}`;
+          
+          const [endH, endM] = currentBlock.endTime.split(':').map(Number);
+          const endDate = new Date();
+          endDate.setHours(endH, endM, 0);
+          const diffMs = endDate - now;
+          if (diffMs > 0) {
+            const minsLeft = Math.floor(diffMs / 60000);
+            const secsLeft = Math.floor((diffMs % 60000) / 1000);
+            countdownTimer.innerText = `${minsLeft}m ${secsLeft}s left`;
+          } else {
+            countdownTimer.innerText = `Ending`;
+          }
+        } else {
+          liveBadge.innerHTML = `<span class="w-2 h-2 rounded-full bg-brand-400"></span> Block #${(currentBlock.index || 0) + 1} (${slotTypeName})`;
+          countdownTimer.innerText = `Scheduled`;
+        }
+
+        if (currentTask) {
+          liveTaskTitle.innerText = currentTask.title;
+          liveTaskSub.innerText = `Assigned to ${currentBlock.startTime} - ${currentBlock.endTime} (${slotTypeName})`;
+          btnCompleteLive.disabled = false;
+          btnCompleteLive.onclick = () => markTaskCompleted(currentTask.id);
+
+          let badgeColor = 'bg-brand-500/20 text-brand-300 border-brand-500/30';
+          let typeName = 'Recurring';
+          if (currentTask.type === 'carried') {
+            badgeColor = 'bg-amber-500/20 text-amber-300 border-amber-500/30';
+            typeName = 'Carried Over';
+          } else if (currentTask.type === 'oneoff') {
+            badgeColor = 'bg-purple-500/20 text-purple-300 border-purple-500/30';
+            typeName = 'One-Off Task';
+          }
+
+          liveTaskTypeTag.innerHTML = `<span class="text-[10px] px-2 py-0.5 rounded border ${badgeColor}">${typeName}</span>`;
+        } else {
+          liveTaskTitle.innerText = currentBlock.type === 'break' ? "15-Minute Break Slot" : "No Task Assigned";
+          liveTaskSub.innerText = currentBlock.type === 'break' ? "Take a rest or schedule a quick break task." : "This block slot is currently open.";
+          btnCompleteLive.disabled = true;
+          liveTaskTypeTag.innerHTML = `<span class="text-[10px] text-slate-500 bg-slate-800 px-2 py-0.5 rounded">Unassigned</span>`;
+        }
+      }
+
+      const todayBlocksList = document.getElementById('today-blocks-list');
+      todayBlocksList.innerHTML = '';
+
+      let completedCount = 0;
+
+      dayData.blocks.forEach((block, idx) => {
+        const task = dayData.tasks.find(t => t.id === block.taskId);
+        if (task && task.completed) completedCount++;
+
+        const isCurrent = idx === activeBlockIndex;
+        const isBreak = block.type === 'break';
+
+        const blockEl = document.createElement('div');
+        blockEl.className = `p-3 rounded-xl border transition-all flex items-center justify-between ${
+          isCurrent 
+            ? 'bg-slate-800/90 border-brand-500/60 shadow-lg ring-1 ring-brand-500/30' 
+            : isBreak
+            ? 'bg-slate-800/20 border-slate-800/80 hover:bg-slate-800/40'
+            : 'bg-slate-800/40 border-slate-700/50 hover:bg-slate-800/70'
+        }`;
+
+        let taskContent = `<span class="text-xs text-slate-500 italic">${isBreak ? '15m Break (Empty)' : 'Empty 35m Block'}</span>`;
+        let checkBtn = '';
+
+        if (task) {
+          if (task.completed) {
+            taskContent = `<span class="text-xs text-slate-400 line-through">${task.title}</span>`;
+            checkBtn = `<button onclick="unmarkTaskCompleted('${task.id}')" class="p-1 text-emerald-400 hover:text-slate-400"><i data-lucide="check-square" class="w-4 h-4"></i></button>`;
+          } else {
+            taskContent = `<span class="text-xs font-semibold text-slate-200">${task.title}</span>`;
+            checkBtn = `<button onclick="markTaskCompleted('${task.id}')" class="p-1 text-slate-500 hover:text-emerald-400"><i data-lucide="square" class="w-4 h-4"></i></button>`;
+          }
+        }
+
+        const durationTag = isBreak 
+          ? `<span class="text-[9px] bg-amber-500/10 text-amber-300 border border-amber-500/20 px-1.5 py-0.5 rounded shrink-0">15m Break</span>` 
+          : `<span class="text-[9px] bg-brand-500/10 text-brand-300 border border-brand-500/20 px-1.5 py-0.5 rounded shrink-0">35m Focus</span>`;
+
+        blockEl.innerHTML = `
+          <div class="flex items-center gap-2.5">
+            <span class="text-[11px] font-mono text-slate-400 bg-slate-900/60 px-2 py-1 rounded border border-slate-700/40 shrink-0">${block.startTime}</span>
+            ${durationTag}
+            <div>
+              ${taskContent}
+            </div>
+          </div>
+          <div class="flex items-center gap-1">
+            ${checkBtn}
+          </div>
+        `;
+        todayBlocksList.appendChild(blockEl);
+      });
+
+      document.getElementById('timeline-progress-count').innerText = `${completedCount}/${dayData.blocks.length} Done`;
+
+      const unassignedTasks = dayData.tasks.filter(t => t.blockIndex === null && !t.completed);
+      const backlogContainer = document.getElementById('unassigned-backlog-container');
+      const backlogList = document.getElementById('unassigned-task-list');
+
+      if (unassignedTasks.length > 0) {
+        backlogContainer.classList.remove('hidden');
+        backlogList.innerHTML = '';
+        unassignedTasks.forEach(task => {
+          const item = document.createElement('div');
+          item.className = 'p-2.5 bg-amber-500/10 border border-amber-500/20 rounded-xl flex items-center justify-between text-xs';
+          item.innerHTML = `
+            <div class="flex items-center gap-2">
+              <i data-lucide="alert-circle" class="w-3.5 h-3.5 text-amber-400"></i>
+              <span class="text-amber-200 font-medium">${task.title}</span>
+            </div>
+            <button onclick="markTaskCompleted('${task.id}')" class="p-1 text-slate-400 hover:text-emerald-400"><i data-lucide="check-circle" class="w-4 h-4"></i></button>
+          `;
+          backlogList.appendChild(item);
+        });
+      } else {
+        backlogContainer.classList.add('hidden');
+      }
+
+      const completedTodayList = document.getElementById('completed-today-list');
+      const completedTodayTasks = dayData.tasks.filter(t => t.completed);
+      document.getElementById('completed-today-count').innerText = completedTodayTasks.length;
+
+      completedTodayList.innerHTML = '';
+      if (completedTodayTasks.length === 0) {
+        completedTodayList.innerHTML = `<p class="text-[11px] text-slate-500 italic p-2 text-center">No tasks completed yet today.</p>`;
+      } else {
+        completedTodayTasks.forEach(task => {
+          const item = document.createElement('div');
+          item.className = 'p-2 bg-slate-800/30 border border-slate-700/30 rounded-lg flex items-center justify-between text-xs';
+          item.innerHTML = `
+            <span class="text-slate-400 line-through">${task.title}</span>
+            <button onclick="unmarkTaskCompleted('${task.id}')" class="text-[10px] text-brand-400 hover:underline">Restore</button>
+          `;
+          completedTodayList.appendChild(item);
+        });
+      }
+
+      lucide.createIcons();
+    }
+
+    function renderPlanView() {
+      const dayData = appState.days[selectedViewingDateStr];
+      const editorList = document.getElementById('editor-blocks-list');
+      editorList.innerHTML = '';
+
+      if (!dayData || !dayData.dayType) {
+        editorList.innerHTML = `<p class="text-xs text-slate-400 p-4 text-center">No schedule available on non-workdays.</p>`;
+        return;
+      }
+
+      dayData.blocks.forEach((block, idx) => {
+        const task = dayData.tasks.find(t => t.id === block.taskId);
+        const card = document.createElement('div');
+        const isBreak = block.type === 'break';
+
+        card.className = `border rounded-xl p-3 flex items-center justify-between gap-2 shadow-sm ${
+          isBreak ? 'bg-slate-800/30 border-amber-500/20' : 'bg-slate-800/60 border-slate-700/70'
+        }`;
+        card.dataset.blockIndex = idx;
+
+        let taskTitle = task ? task.title : '';
+        const durationTag = isBreak ? '15m' : '35m';
+
+        card.innerHTML = `
+          <div class="flex items-center gap-2 flex-1">
+            <i data-lucide="grip-vertical" class="w-4 h-4 text-slate-500 cursor-grab shrink-0"></i>
+            <span class="text-xs font-mono ${isBreak ? 'text-amber-400 bg-amber-500/10 border-amber-500/20' : 'text-brand-400 bg-brand-500/10 border-brand-500/20'} px-1.5 py-0.5 rounded border shrink-0">${block.startTime} (${durationTag})</span>
+            <input type="text" value="${escapeHtml(taskTitle)}" placeholder="${isBreak ? '15m break task...' : '35m focus task...'}" 
+              onchange="updateBlockTaskTitle(${idx}, this.value)"
+              class="w-full bg-slate-900/80 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-100 focus:outline-none focus:border-brand-500 transition">
+          </div>
+          <div class="flex items-center gap-1 shrink-0">
+            <button onclick="shiftTaskPosition(${idx}, -1)" title="Move Up" class="p-1 hover:bg-slate-700 rounded text-slate-400 hover:text-white"><i data-lucide="arrow-up" class="w-3.5 h-3.5"></i></button>
+            <button onclick="shiftTaskPosition(${idx}, 1)" title="Move Down" class="p-1 hover:bg-slate-700 rounded text-slate-400 hover:text-white"><i data-lucide="arrow-down" class="w-3.5 h-3.5"></i></button>
+            ${task ? `<button onclick="deleteTaskFromBlock(${idx})" class="p-1 hover:bg-rose-500/20 rounded text-slate-500 hover:text-rose-400"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i></button>` : ''}
+          </div>
+        `;
+
+        editorList.appendChild(card);
+      });
+
+      lucide.createIcons();
+    }
+
+    function renderTemplatesView() {
+      const currentDay = appState.activeTemplateTab;
+      const heading = document.getElementById('template-day-heading');
+      const timeRange = document.getElementById('template-time-range');
+      const slotsList = document.getElementById('template-slots-list');
+
+      const fullNames = { mon: 'Monday Template', wed: 'Wednesday Template', fri: 'Friday Template' };
+      const ranges = { mon: '09:00 - 13:45', wed: '09:00 - 16:15', fri: '09:00 - 16:15' };
+
+      heading.innerText = fullNames[currentDay];
+      timeRange.innerText = ranges[currentDay];
+
+      const tasks = appState.templates[currentDay] || [];
+      const definitions = SCHEDULE_DEFINITIONS[currentDay];
+
+      slotsList.innerHTML = '';
+      definitions.forEach((def, idx) => {
+        const val = tasks[idx] || '';
+        const isBreak = def.type === 'break';
+        const row = document.createElement('div');
+        row.className = 'flex items-center gap-2';
+
+        const tagClass = isBreak ? 'text-amber-400 bg-amber-500/10 border-amber-500/30' : 'text-brand-400 bg-brand-500/10 border-brand-500/30';
+
+        row.innerHTML = `
+          <span class="text-xs font-mono bg-slate-900 px-2 py-1.5 rounded border border-slate-700/60 shrink-0 w-32 text-center flex items-center justify-between">
+            <span>${def.start}</span>
+            <span class="text-[9px] px-1 rounded border ${tagClass}">${def.duration}m</span>
+          </span>
+          <input type="text" value="${escapeHtml(val)}" placeholder="${isBreak ? '15m break task...' : '35m focus task...'}" 
+            onchange="updateTemplateTask('${currentDay}', ${idx}, this.value)"
+            class="flex-1 bg-slate-900 border border-slate-700/80 rounded-xl px-3 py-1.5 text-xs text-white focus:outline-none focus:border-brand-500 transition">
+        `;
+        slotsList.appendChild(row);
+      });
+    }
+
+    function renderCompletedView() {
+      const archiveList = document.getElementById('completed-archive-list');
+      archiveList.innerHTML = '';
+
+      // Collect all completed tasks across all days
+      let completedByDate = [];
+
+      Object.keys(appState.days).forEach(dateStr => {
+        const day = appState.days[dateStr];
+        const completed = day.tasks.filter(t => t.completed);
+        if (completed.length > 0) {
+          completedByDate.push({
+            dateStr: dateStr,
+            tasks: completed
+          });
+        }
+      });
+
+      completedByDate.sort((a, b) => b.dateStr.localeCompare(a.dateStr));
+
+      if (completedByDate.length === 0) {
+        archiveList.innerHTML = `
+          <div class="text-center py-10 text-slate-500 space-y-2">
+            <i data-lucide="check-circle-2" class="w-8 h-8 mx-auto text-slate-600"></i>
+            <p class="text-xs">No completed tasks in history yet.</p>
+          </div>
+        `;
+        lucide.createIcons();
+        return;
+      }
+
+      completedByDate.forEach(group => {
+        const dateObj = parseDateStr(group.dateStr);
+        const groupEl = document.createElement('div');
+        groupEl.className = 'bg-slate-800/40 border border-slate-700/50 rounded-2xl p-3.5 space-y-2';
+
+        let itemsHtml = group.tasks.map(t => `
+          <div class="flex items-center justify-between text-xs py-1 border-b border-slate-700/30 last:border-0">
+            <span class="text-slate-300 line-through">${escapeHtml(t.title)}</span>
+            <span class="text-[10px] text-slate-500">${t.type}</span>
+          </div>
+        `).join('');
+
+        groupEl.innerHTML = `
+          <div class="flex items-center justify-between text-xs font-bold text-brand-400 border-b border-slate-700/50 pb-1.5">
+            <span>${dateObj.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}</span>
+            <span class="text-[10px] bg-emerald-500/20 text-emerald-300 px-2 py-0.5 rounded-full">${group.tasks.length} Completed</span>
+          </div>
+          <div class="pt-1">${itemsHtml}</div>
+        `;
+
+        archiveList.appendChild(groupEl);
+      });
+
+      lucide.createIcons();
+    }
+
+    // Escape helper
+    function escapeHtml(str) {
+      return (str || '').replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+    }
+
+    // --- ACTIONS & HANDLERS ---
+
+    function markTaskCompleted(taskId) {
+      const dayData = appState.days[selectedViewingDateStr];
+      if (!dayData) return;
+
+      const task = dayData.tasks.find(t => t.id === taskId);
+      if (task) {
+        task.completed = true;
+        task.completedAt = new Date().toISOString();
+        saveState();
+        renderTodayView();
+        renderPlanView();
+      }
+    }
+
+    function unmarkTaskCompleted(taskId) {
+      const dayData = appState.days[selectedViewingDateStr];
+      if (!dayData) return;
+
+      const task = dayData.tasks.find(t => t.id === taskId);
+      if (task) {
+        task.completed = false;
+        task.completedAt = null;
+        saveState();
+        renderTodayView();
+        renderPlanView();
+      }
+    }
+
+    function updateBlockTaskTitle(blockIndex, newTitle) {
+      const dayData = appState.days[selectedViewingDateStr];
+      if (!dayData) return;
+
+      const block = dayData.blocks[blockIndex];
+      if (!block) return;
+
+      let task = dayData.tasks.find(t => t.id === block.taskId);
+
+      if (!newTitle.trim()) {
+        if (task) {
+          dayData.tasks = dayData.tasks.filter(t => t.id !== task.id);
+          block.taskId = null;
+        }
+      } else {
+        if (task) {
+          task.title = newTitle.trim();
+        } else {
+          const newTask = {
+            id: generateId(),
+            title: newTitle.trim(),
+            type: 'oneoff',
+            originDate: selectedViewingDateStr,
+            completed: false,
+            completedAt: null,
+            recurringDay: null,
+            blockIndex: blockIndex
+          };
+          dayData.tasks.push(newTask);
+          block.taskId = newTask.id;
+        }
+      }
+
+      saveState();
+      renderTodayView();
+    }
+
+    function deleteTaskFromBlock(blockIndex) {
+      const dayData = appState.days[selectedViewingDateStr];
+      if (!dayData) return;
+
+      const block = dayData.blocks[blockIndex];
+      if (block && block.taskId) {
+        dayData.tasks = dayData.tasks.filter(t => t.id !== block.taskId);
+        block.taskId = null;
+        saveState();
+        renderPlanView();
+        renderTodayView();
+      }
+    }
+
+    function shiftTaskPosition(blockIndex, direction) {
+      const dayData = appState.days[selectedViewingDateStr];
+      if (!dayData) return;
+
+      const targetIndex = blockIndex + direction;
+      if (targetIndex < 0 || targetIndex >= dayData.blocks.length) return;
+
+      const curBlock = dayData.blocks[blockIndex];
+      const targetBlock = dayData.blocks[targetIndex];
+
+      // Swap taskId assignments
+      const tempId = curBlock.taskId;
+      curBlock.taskId = targetBlock.taskId;
+      targetBlock.taskId = tempId;
+
+      // Sync task blockIndex properties
+      if (curBlock.taskId) {
+        const t1 = dayData.tasks.find(t => t.id === curBlock.taskId);
+        if (t1) t1.blockIndex = blockIndex;
+      }
+      if (targetBlock.taskId) {
+        const t2 = dayData.tasks.find(t => t.id === targetBlock.taskId);
+        if (t2) t2.blockIndex = targetIndex;
+      }
+
+      saveState();
+      renderPlanView();
+      renderTodayView();
+    }
+
+    function updateTemplateTask(dayType, slotIndex, title) {
+      appState.templates[dayType][slotIndex] = title;
+      saveState();
+    }
+
+    // --- NAVIGATION TABS ENGINE ---
+    function setupNavigation() {
+      const navButtons = document.querySelectorAll('.nav-item');
+      const screens = document.querySelectorAll('.tab-screen');
+
+      navButtons.forEach(btn => {
+        btn.addEventListener('click', () => {
+          const targetTab = btn.dataset.tab;
+
+          screens.forEach(s => s.classList.add('hidden'));
+          document.getElementById(targetTab).classList.remove('hidden');
+
+          navButtons.forEach(b => {
+            b.classList.remove('text-brand-400');
+            b.classList.add('text-slate-400');
+          });
+          btn.classList.remove('text-slate-400');
+          btn.classList.add('text-brand-400');
+
+          // Trigger view renders on tab change
+          if (targetTab === 'tab-today') renderTodayView();
+          if (targetTab === 'tab-plan') renderPlanView();
+          if (targetTab === 'tab-templates') renderTemplatesView();
+          if (targetTab === 'tab-completed') renderCompletedView();
+        });
+      });
+
+      // Template Tabs
+      const templateTabs = document.querySelectorAll('.btn-template-tab');
+      templateTabs.forEach(tab => {
+        tab.addEventListener('click', () => {
+          templateTabs.forEach(t => t.classList.remove('bg-brand-600', 'text-white'));
+          tab.classList.add('bg-brand-600', 'text-white');
+          appState.activeTemplateTab = tab.dataset.templateDay;
+          renderTemplatesView();
+        });
+      });
+
+      // Default active tab styling
+      document.querySelector('[data-template-day="mon"]')?.classList.add('bg-brand-600', 'text-white');
+    }
+
+    // --- MODAL ENGINE ---
+    function setupModal() {
+      const modal = document.getElementById('modal-add-task');
+      const btnAdd = document.getElementById('btn-add-quick-task');
+      const btnAddPlan = document.getElementById('btn-add-oneoff-plan');
+      const btnClose = document.getElementById('btn-close-modal');
+      const btnCancel = document.getElementById('btn-cancel-modal');
+      const btnSave = document.getElementById('btn-save-task');
+      const selectBlock = document.getElementById('select-task-block');
+      const inputTitle = document.getElementById('input-task-title');
+
+      function openModal() {
+        const dayData = appState.days[selectedViewingDateStr];
+        selectBlock.innerHTML = `<option value="">Unassigned Backlog</option>`;
+
+        if (dayData && dayData.blocks) {
+          dayData.blocks.forEach((b, idx) => {
+            const assignedTask = dayData.tasks.find(t => t.id === b.taskId);
+            const statusStr = assignedTask ? `(${assignedTask.title})` : '(Empty)';
+            selectBlock.innerHTML += `<option value="${idx}">Block #${idx + 1} ${b.startTime} ${statusStr}</option>`;
+          });
+        }
+
+        inputTitle.value = '';
+        modal.classList.remove('hidden');
+        inputTitle.focus();
+      }
+
+      function closeModal() {
+        modal.classList.add('hidden');
+      }
+
+      btnAdd.addEventListener('click', openModal);
+      btnAddPlan?.addEventListener('click', openModal);
+      btnClose.addEventListener('click', closeModal);
+      btnCancel.addEventListener('click', closeModal);
+
+      btnSave.addEventListener('click', () => {
+        const title = inputTitle.value.trim();
+        if (!title) return;
+
+        const dayData = appState.days[selectedViewingDateStr];
+        if (!dayData) return;
+
+        const selectedIdxStr = selectBlock.value;
+        const blockIdx = selectedIdxStr !== "" ? parseInt(selectedIdxStr, 10) : null;
+
+        const newTask = {
+          id: generateId(),
+          title: title,
+          type: 'oneoff',
+          originDate: selectedViewingDateStr,
+          completed: false,
+          completedAt: null,
+          recurringDay: null,
+          blockIndex: blockIdx
+        };
+
+        dayData.tasks.push(newTask);
+
+        if (blockIdx !== null && dayData.blocks[blockIdx]) {
+          dayData.blocks[blockIdx].taskId = newTask.id;
+        }
+
+        saveState();
+        closeModal();
+        renderTodayView();
+        renderPlanView();
+      });
+    }
+
+    // Reset Data Helper for user convenience
+    document.getElementById('btn-[reset]-data')?.addEventListener('click', () => {
+      if (confirm('Reset planner back to default sample templates and state?')) {
+        localStorage.removeItem('focus_planner_pwa_data_v1');
+        appState = {
+          templates: JSON.parse(JSON.stringify(DEFAULT_TEMPLATES)),
+          days: {},
+          lastProcessedDate: null,
+          activeTemplateTab: 'mon'
+        };
+        initCurrentSchedule();
+        renderHeader();
+        renderTodayView();
+      }
+    });
+
+    // Toggle completed today list
+    document.getElementById('btn-toggle-completed-today')?.addEventListener('click', () => {
+      const list = document.getElementById('completed-today-list');
+      const icon = document.getElementById('icon-chevron-completed');
+      list.classList.toggle('hidden');
+      icon.classList.toggle('rotate-180');
+    });
+
+    // Jump to next workday on banner click
+    document.getElementById('btn-jump-today')?.addEventListener('click', () => {
+      const nextDate = getNextWorkdayDate(new Date());
+      selectedViewingDateStr = getFormattedDateStr(nextDate);
+      ensureDayInstantiated(selectedViewingDateStr);
+      renderHeader();
+      renderTodayView();
+    });
+
+    // --- INITIALIZATION ---
+    window.addEventListener('DOMContentLoaded', () => {
+      initCurrentSchedule();
+      setupNavigation();
+      setupModal();
+      renderHeader();
+      renderTodayView();
+
+      // Realtime tick every 10 seconds to update block live timer
+      setInterval(() => {
+        renderTodayView();
+      }, 10000);
+    });
+
+  </script>
+</body>
+</html>
