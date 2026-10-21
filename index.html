@@ -380,34 +380,34 @@
 
     const DEFAULT_TEMPLATES = {
       mon: [
-        "NJ / AJ ", "Coffee / Vyvetrat",
-        "AI Profit Lab", "Riady",
-        "Cooking", "Cooking",
-        "Cooking", "Food",
-        "", "Coffee / Vyvetrat",
-        ""
+        "NJ ", "Quick Hydration & Stretch",
+        "Documentation & Logs", "Inbox Clearing",
+        "Administration & Emails", "Walk & Coffee Break",
+        "Team Sync & Standup", "Quick Check-in / Notes",
+        "Architecture & Specs", "Mindful Breathing",
+        "Weekly Retrospective"
       ],
       wed: [
-        "Laundry", "Coffee / Vyvetrat",
-        "Laundry", "Kitchen Cleaning",
-        "Laundry", "Kitchen Cleaning",
-        "Laundry", "Food",
-        "Laundry", "",
-        "NJ / AJ", "Riady / vyvetrat",
-        "AI Profit Lab", "Food",
-        "Cooking", "Cooking",
-        "Cooking"
+        "Deep Focus Core Feature", "Short Rest",
+        "Deep Focus Core Feature", "Stretch & Coffee",
+        "Code Review & Pull Requests", "Quick Break",
+        "Database Maintenance", "Hydration Break",
+        "System Refactoring", "Walk Outside",
+        "Bug Fixing Session", "Tea Break",
+        "Client Communication", "Quick Reset",
+        "Testing & QA", "Pre-wrap Stretch",
+        "Learning & Research"
       ],
       fri: [
-        "NJ / AJ", "Coffee / Vyvetrat",
-        "AI Profit Lab", "Toilette",
-        "Spokojna v praci", "Bathroom",
-        "", "Bathroom",
-        "Food", "Coffee / Vyvetrat",
-        "Umyt dlazku", "Riady",
-        "", "Kvety",
-        "Cooking", "Cooking",
-        "Cooking"
+        "Weekly Release Build", "Short Rest",
+        "Deployment & Monitoring", "Coffee Break",
+        "Performance Tuning", "Quick Break",
+        "Security Sweep", "Hydration",
+        "Documentation Updates", "Walk Break",
+        "Refactoring Backlog", "Tea Break",
+        "Tech Debt Review", "Quick Stretch",
+        "Team Knowledge Sharing", "Final Review Notes",
+        "Next Week Prep"
       ]
     };
 
@@ -846,6 +846,7 @@
             <i data-lucide="grip-vertical" class="w-4 h-4 text-slate-500 cursor-grab shrink-0"></i>
             <span class="text-xs font-mono ${isBreak ? 'text-amber-400 bg-amber-500/10 border-amber-500/20' : 'text-brand-400 bg-brand-500/10 border-brand-500/20'} px-1.5 py-0.5 rounded border shrink-0">${block.startTime} (${durationTag})</span>
             <input type="text" value="${escapeHtml(taskTitle)}" placeholder="${isBreak ? '15m break task...' : '35m focus task...'}" 
+              oninput="updateBlockTaskTitle(${idx}, this.value)"
               onchange="updateBlockTaskTitle(${idx}, this.value)"
               class="w-full bg-slate-900/80 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-100 focus:outline-none focus:border-brand-500 transition">
           </div>
@@ -1020,6 +1021,59 @@
     function updateTemplateTask(dayType, slotIndex, title) {
       appState.templates[dayType][slotIndex] = title;
       saveState();
+    }
+
+    function updateBlockTaskTitle(blockIndex, newTitle) {
+      const dayData = appState.days[selectedViewingDateStr];
+      if (!dayData || !dayData.blocks[blockIndex]) return;
+
+      const block = dayData.blocks[blockIndex];
+      const trimmedTitle = newTitle.trim();
+
+      if (block.taskId) {
+        const task = dayData.tasks.find(t => t.id === block.taskId);
+        if (task) {
+          if (trimmedTitle) {
+            task.title = trimmedTitle;
+          } else {
+            // Remove task if input is cleared
+            dayData.tasks = dayData.tasks.filter(t => t.id !== block.taskId);
+            block.taskId = null;
+          }
+        }
+      } else if (trimmedTitle) {
+        // Create new task for block if none existed
+        const newTask = {
+          id: generateId(),
+          title: trimmedTitle,
+          type: 'oneoff',
+          slotType: block.type,
+          originDate: selectedViewingDateStr,
+          completed: false,
+          completedAt: null,
+          recurringDay: null,
+          blockIndex: blockIndex
+        };
+        dayData.tasks.push(newTask);
+        block.taskId = newTask.id;
+      }
+
+      saveState();
+      renderTodayView();
+    }
+
+    function deleteTaskFromBlock(blockIndex) {
+      const dayData = appState.days[selectedViewingDateStr];
+      if (!dayData || !dayData.blocks[blockIndex]) return;
+
+      const block = dayData.blocks[blockIndex];
+      if (block.taskId) {
+        dayData.tasks = dayData.tasks.filter(t => t.id !== block.taskId);
+        block.taskId = null;
+        saveState();
+        renderPlanView();
+        renderTodayView();
+      }
     }
 
     // --- NAVIGATION TABS ENGINE ---
