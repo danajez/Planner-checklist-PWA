@@ -378,7 +378,7 @@
       ]
     };
 
-     const DEFAULT_TEMPLATES = {
+    const DEFAULT_TEMPLATES = {
       mon: [
         "NJ / AJ ", "Coffee / Vyvetrat",
         "AI Profit Lab", "Riady",
@@ -600,6 +600,58 @@
 
       saveState();
       return appState.days[targetDateStr];
+    }
+
+    // --- TASK COMPLETION ENGINE ---
+    function markTaskCompleted(taskId) {
+      if (!taskId) return;
+      
+      const dayData = appState.days[selectedViewingDateStr];
+      if (!dayData) return;
+
+      const task = dayData.tasks.find(t => t.id === taskId);
+      if (task) {
+        task.completed = true;
+        task.completedAt = new Date().toISOString();
+
+        // Release the block slot so it shows as open/unassigned
+        if (task.blockIndex !== null && dayData.blocks[task.blockIndex]) {
+          if (dayData.blocks[task.blockIndex].taskId === taskId) {
+            dayData.blocks[task.blockIndex].taskId = null;
+          }
+        }
+
+        saveState();
+        renderTodayView();
+        renderPlanView();
+        renderCompletedView();
+      }
+    }
+
+    function unmarkTaskCompleted(taskId) {
+      if (!taskId) return;
+
+      const dayData = appState.days[selectedViewingDateStr];
+      if (!dayData) return;
+
+      const task = dayData.tasks.find(t => t.id === taskId);
+      if (task) {
+        task.completed = false;
+        task.completedAt = null;
+
+        // Try to re-assign back to original block index if it's currently empty
+        if (task.blockIndex !== null && dayData.blocks[task.blockIndex]) {
+          const targetBlock = dayData.blocks[task.blockIndex];
+          if (!targetBlock.taskId) {
+            targetBlock.taskId = task.id;
+          }
+        }
+
+        saveState();
+        renderTodayView();
+        renderPlanView();
+        renderCompletedView();
+      }
     }
 
     // Initialize application state for today
