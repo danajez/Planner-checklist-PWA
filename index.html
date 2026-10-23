@@ -386,7 +386,232 @@
       const year = dateObj.getFullYear();
       const month = String(dateObj.getMonth() + 1).padStart(2, '0');
       const day = String(dateObj.getDate()).padStart(2, '0');
-      return `${year}-${month}-${day}`; }  function parseDateStr(dateStr) { const [y, m, d] = dateStr.split('-').map(Number); return new Date(y, m - 1, d); }  function getWorkdayType(dateObj) { const dayNum = dateObj.getDay(); if (dayNum === 1) return 'mon'; if (dayNum === 3) return 'wed'; if (dayNum === 5) return 'fri'; return null; }  function getNextWorkdayDate(fromDate) { let cur = new Date(fromDate.getTime()); cur.setDate(cur.getDate() + 1); while (!getWorkdayType(cur)) { cur.setDate(cur.getDate() + 1); } return cur; }  function getPrevWorkdayDate(fromDate) { let cur = new Date(fromDate.getTime()); cur.setDate(cur.getDate() - 1); while (!getWorkdayType(cur)) { cur.setDate(cur.getDate() - 1); } return cur; }  function generateId() { return 'task_' + Math.random().toString(36).substr(2, 9); }  // --- LOCAL STORAGE MANAGER --- function loadState() { const saved = localStorage.getItem('focus_planner_pwa_data_v1'); if (saved) { try { appState = JSON.parse(saved); } catch (e) { console.error("Failed to parse stored state:", e); } } }  function saveState() { localStorage.setItem('focus_planner_pwa_data_v1', JSON.stringify(appState)); }  // --- CARRY-OVER & SCHEDULE GENERATOR --- function ensureDayInstantiated(targetDateStr) { const targetDate = parseDateStr(targetDateStr); const dayType = getWorkdayType(targetDate);  if (appState.days[targetDateStr]) { return appState.days[targetDateStr]; }  if (!dayType) { appState.days[targetDateStr] = { date: targetDateStr, dayType: null, blocks: [], tasks: [], carryOverProcessed: true }; saveState(); return appState.days[targetDateStr]; }  const blockDefs = SCHEDULE_DEFINITIONS[dayType]; const blocks = blockDefs.map((def, idx) => ({ index: idx, startTime: def.start, endTime: def.end, label: def.label, duration: def.duration, type: def.type, taskId: null }));  // Template tasks take priority const templateTasks = appState.templates[dayType] \vert{}\vert{} []; const todayTasks = [];  templateTasks.forEach((title, idx) => { if (title && title.trim()) { const slotDef = blockDefs[idx]; todayTasks.push({ id: generateId(), title: title.trim(), type: 'recurring', slotType: slotDef ? slotDef.type : 'focus', originDate: targetDateStr, completed: false, completedAt: null, recurringDay: dayType, blockIndex: idx }); } });  todayTasks.forEach(task => { if (task.blockIndex !== null && blocks[task.blockIndex]) { blocks[task.blockIndex].taskId = task.id; } });  // Gather unfinished carried-over tasks from previous active workday let carriedTasks = []; const prevDate = getPrevWorkdayDate(targetDate); const prevDateStr = getFormattedDateStr(prevDate);  if (appState.days[prevDateStr]) { const prevDay = appState.days[prevDateStr]; const unfinished = prevDay.tasks.filter(t => !t.completed); unfinished.forEach(task => { let targetSlotType = task.slotType \vert{}\vert{} 'focus'; if (task.blockIndex !== null && prevDay.blocks[task.blockIndex]) { targetSlotType = prevDay.blocks[task.blockIndex].type; }  carriedTasks.push({ id: generateId(), title: task.title, type: 'carried', slotType: targetSlotType, originDate: task.originDate \vert{}\vert{} prevDateStr, completed: false, completedAt: null, recurringDay: null, blockIndex: null }); }); }  carriedTasks.forEach(carriedTask => { const matchingEmptyBlock = blocks.find(b => b.type === carriedTask.slotType && b.taskId === null); if (matchingEmptyBlock) { matchingEmptyBlock.taskId = carriedTask.id; carriedTask.blockIndex = matchingEmptyBlock.index; } else { carriedTask.blockIndex = null; } });  const allDayTasks = [...todayTasks, ...carriedTasks];  appState.days[targetDateStr] = { date: targetDateStr, dayType: dayType, blocks: blocks, tasks: allDayTasks, carryOverProcessed: true };  saveState(); return appState.days[targetDateStr]; }  // --- TASK COMPLETION ENGINE --- function markTaskCompleted(taskId) { if (!taskId) return;  const dayData = appState.days[selectedViewingDateStr]; if (!dayData) return;  const task = dayData.tasks.find(t => t.id === taskId); if (task) { task.completed = true; task.completedAt = new Date().toISOString();  if (task.blockIndex !== null && dayData.blocks[task.blockIndex]) { if (dayData.blocks[task.blockIndex].taskId === taskId) { dayData.blocks[task.blockIndex].taskId = null; } }  saveState(); renderTodayView(); renderPlanView(); renderCompletedView(); } }  function unmarkTaskCompleted(taskId) { if (!taskId) return;  const dayData = appState.days[selectedViewingDateStr]; if (!dayData) return;  const task = dayData.tasks.find(t => t.id === taskId); if (task) { task.completed = false; task.completedAt = null;  if (task.blockIndex !== null && dayData.blocks[task.blockIndex]) { const targetBlock = dayData.blocks[task.blockIndex]; if (!targetBlock.taskId) { targetBlock.taskId = task.id; } }  saveState(); renderTodayView(); renderPlanView(); renderCompletedView(); } }  function initCurrentSchedule() { loadState(); const today = new Date(); const todayStr = getFormattedDateStr(today); const dayType = getWorkdayType(today);  if (!dayType) { const nextWorkday = getNextWorkdayDate(today); selectedViewingDateStr = getFormattedDateStr(nextWorkday); document.getElementById('non-workday-banner').classList.remove('hidden'); document.getElementById('non-workday-text').innerText = `Today (${today.toLocaleDateString('en-US', { weekday: 'short' })}) is not a scheduled workday. Showing next workday.`;
+      return `${year}-${month}-${day}`;
+    }
+
+    function parseDateStr(dateStr) {
+      const [y, m, d] = dateStr.split('-').map(Number);
+      return new Date(y, m - 1, d);
+    }
+
+    function getWorkdayType(dateObj) {
+      const dayNum = dateObj.getDay(); 
+      if (dayNum === 1) return 'mon';
+      if (dayNum === 3) return 'wed';
+      if (dayNum === 5) return 'fri';
+      return null;
+    }
+
+    function getNextWorkdayDate(fromDate) {
+      let cur = new Date(fromDate.getTime());
+      cur.setDate(cur.getDate() + 1);
+      while (!getWorkdayType(cur)) {
+        cur.setDate(cur.getDate() + 1);
+      }
+      return cur;
+    }
+
+    function getPrevWorkdayDate(fromDate) {
+      let cur = new Date(fromDate.getTime());
+      cur.setDate(cur.getDate() - 1);
+      while (!getWorkdayType(cur)) {
+        cur.setDate(cur.getDate() - 1);
+      }
+      return cur;
+    }
+
+    function generateId() {
+      return 'task_' + Math.random().toString(36).substr(2, 9);
+    }
+
+    // --- LOCAL STORAGE MANAGER ---
+    function loadState() {
+      const saved = localStorage.getItem('focus_planner_pwa_data_v1');
+      if (saved) {
+        try {
+          appState = JSON.parse(saved);
+        } catch (e) {
+          console.error("Failed to parse stored state:", e);
+        }
+      }
+    }
+
+    function saveState() {
+      localStorage.setItem('focus_planner_pwa_data_v1', JSON.stringify(appState));
+    }
+
+    // --- CARRY-OVER & SCHEDULE GENERATOR ---
+    function ensureDayInstantiated(targetDateStr) {
+      const targetDate = parseDateStr(targetDateStr);
+      const dayType = getWorkdayType(targetDate);
+
+      if (appState.days[targetDateStr]) {
+        return appState.days[targetDateStr];
+      }
+
+      if (!dayType) {
+        appState.days[targetDateStr] = {
+          date: targetDateStr,
+          dayType: null,
+          blocks: [],
+          tasks: [],
+          carryOverProcessed: true
+        };
+        saveState();
+        return appState.days[targetDateStr];
+      }
+
+      const blockDefs = SCHEDULE_DEFINITIONS[dayType];
+      const blocks = blockDefs.map((def, idx) => ({
+        index: idx,
+        startTime: def.start,
+        endTime: def.end,
+        label: def.label,
+        duration: def.duration,
+        type: def.type,
+        taskId: null
+      }));
+
+      // Template tasks take priority
+      const templateTasks = appState.templates[dayType] || [];
+      const todayTasks = [];
+
+      templateTasks.forEach((title, idx) => {
+        if (title && title.trim()) {
+          const slotDef = blockDefs[idx];
+          todayTasks.push({
+            id: generateId(),
+            title: title.trim(),
+            type: 'recurring',
+            slotType: slotDef ? slotDef.type : 'focus',
+            originDate: targetDateStr,
+            completed: false,
+            completedAt: null,
+            recurringDay: dayType,
+            blockIndex: idx
+          });
+        }
+      });
+
+      todayTasks.forEach(task => {
+        if (task.blockIndex !== null && blocks[task.blockIndex]) {
+          blocks[task.blockIndex].taskId = task.id;
+        }
+      });
+
+      // Gather unfinished carried-over tasks from previous active workday
+      let carriedTasks = [];
+      const prevDate = getPrevWorkdayDate(targetDate);
+      const prevDateStr = getFormattedDateStr(prevDate);
+      
+      if (appState.days[prevDateStr]) {
+        const prevDay = appState.days[prevDateStr];
+        const unfinished = prevDay.tasks.filter(t => !t.completed);
+        unfinished.forEach(task => {
+          let targetSlotType = task.slotType || 'focus';
+          if (task.blockIndex !== null && prevDay.blocks[task.blockIndex]) {
+            targetSlotType = prevDay.blocks[task.blockIndex].type;
+          }
+
+          carriedTasks.push({
+            id: generateId(),
+            title: task.title,
+            type: 'carried',
+            slotType: targetSlotType, 
+            originDate: task.originDate || prevDateStr,
+            completed: false,
+            completedAt: null,
+            recurringDay: null,
+            blockIndex: null
+          });
+        });
+      }
+
+      carriedTasks.forEach(carriedTask => {
+        const matchingEmptyBlock = blocks.find(b => b.type === carriedTask.slotType && b.taskId === null);
+        if (matchingEmptyBlock) {
+          matchingEmptyBlock.taskId = carriedTask.id;
+          carriedTask.blockIndex = matchingEmptyBlock.index;
+        } else {
+          carriedTask.blockIndex = null;
+        }
+      });
+
+      const allDayTasks = [...todayTasks, ...carriedTasks];
+
+      appState.days[targetDateStr] = {
+        date: targetDateStr,
+        dayType: dayType,
+        blocks: blocks,
+        tasks: allDayTasks,
+        carryOverProcessed: true
+      };
+
+      saveState();
+      return appState.days[targetDateStr];
+    }
+
+    // --- TASK COMPLETION ENGINE ---
+    function markTaskCompleted(taskId) {
+      if (!taskId) return;
+      
+      const dayData = appState.days[selectedViewingDateStr];
+      if (!dayData) return;
+
+      const task = dayData.tasks.find(t => t.id === taskId);
+      if (task) {
+        task.completed = true;
+        task.completedAt = new Date().toISOString();
+
+        if (task.blockIndex !== null && dayData.blocks[task.blockIndex]) {
+          if (dayData.blocks[task.blockIndex].taskId === taskId) {
+            dayData.blocks[task.blockIndex].taskId = null;
+          }
+        }
+
+        saveState();
+        renderTodayView();
+        renderPlanView();
+        renderCompletedView();
+      }
+    }
+
+    function unmarkTaskCompleted(taskId) {
+      if (!taskId) return;
+
+      const dayData = appState.days[selectedViewingDateStr];
+      if (!dayData) return;
+
+      const task = dayData.tasks.find(t => t.id === taskId);
+      if (task) {
+        task.completed = false;
+        task.completedAt = null;
+
+        if (task.blockIndex !== null && dayData.blocks[task.blockIndex]) {
+          const targetBlock = dayData.blocks[task.blockIndex];
+          if (!targetBlock.taskId) {
+            targetBlock.taskId = task.id;
+          }
+        }
+
+        saveState();
+        renderTodayView();
+        renderPlanView();
+        renderCompletedView();
+      }
+    }
+
+    function initCurrentSchedule() {
+      loadState();
+      const today = new Date();
+      const todayStr = getFormattedDateStr(today);
+      const dayType = getWorkdayType(today);
+
+      if (!dayType) {
+        const nextWorkday = getNextWorkdayDate(today);
+        selectedViewingDateStr = getFormattedDateStr(nextWorkday);
+        document.getElementById('non-workday-banner').classList.remove('hidden');
+        document.getElementById('non-workday-text').innerText = `Today (${today.toLocaleDateString('en-US', { weekday: 'short' })}) is not a scheduled workday. Showing next workday.`;
       } else {
         selectedViewingDateStr = todayStr;
         document.getElementById('non-workday-banner').classList.add('hidden');
@@ -415,7 +640,33 @@
 
       const blockDefs = SCHEDULE_DEFINITIONS[dayData.dayType];
       const now = new Date();
-      const nowTimeStr = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;  const isViewingToday = selectedViewingDateStr === getFormattedDateStr(new Date()); let activeBlockIndex = -1;  if (isViewingToday) { blockDefs.forEach((def, idx) => { if (nowTimeStr >= def.start && nowTimeStr <= def.end) { activeBlockIndex = idx; } }); }  const liveBadge = document.getElementById('live-block-badge'); const liveTime = document.getElementById('live-block-time'); const liveTaskTitle = document.getElementById('live-task-title'); const liveTaskSub = document.getElementById('live-task-subtitle'); const liveTaskTypeTag = document.getElementById('live-task-type-tag'); const btnCompleteLive = document.getElementById('btn-complete-live-task'); const countdownTimer = document.getElementById('live-timer-countdown');  let currentBlock = activeBlockIndex !== -1 ? dayData.blocks[activeBlockIndex] : dayData.blocks[0]; if (!currentBlock && dayData.blocks.length > 0) currentBlock = dayData.blocks[0];  if (currentBlock) { const currentTask = dayData.tasks.find(t => t.id === currentBlock.taskId && !t.completed); liveTime.innerText = `${currentBlock.startTime} - ${currentBlock.endTime} (${currentBlock.duration}m)`;
+      const nowTimeStr = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
+
+      const isViewingToday = selectedViewingDateStr === getFormattedDateStr(new Date());
+      let activeBlockIndex = -1;
+
+      if (isViewingToday) {
+        blockDefs.forEach((def, idx) => {
+          if (nowTimeStr >= def.start && nowTimeStr <= def.end) {
+            activeBlockIndex = idx;
+          }
+        });
+      }
+
+      const liveBadge = document.getElementById('live-block-badge');
+      const liveTime = document.getElementById('live-block-time');
+      const liveTaskTitle = document.getElementById('live-task-title');
+      const liveTaskSub = document.getElementById('live-task-subtitle');
+      const liveTaskTypeTag = document.getElementById('live-task-type-tag');
+      const btnCompleteLive = document.getElementById('btn-complete-live-task');
+      const countdownTimer = document.getElementById('live-timer-countdown');
+
+      let currentBlock = activeBlockIndex !== -1 ? dayData.blocks[activeBlockIndex] : dayData.blocks[0];
+      if (!currentBlock && dayData.blocks.length > 0) currentBlock = dayData.blocks[0];
+
+      if (currentBlock) {
+        const currentTask = dayData.tasks.find(t => t.id === currentBlock.taskId && !t.completed);
+        liveTime.innerText = `${currentBlock.startTime} - ${currentBlock.endTime} (${currentBlock.duration}m)`;
 
         const slotTypeName = currentBlock.type === 'break' ? '15m Break' : '35m Focus Block';
         liveTaskTypeTag.innerHTML = `<span class="text-[10px] text-slate-300 bg-slate-700/60 px-2 py-0.5 rounded border border-slate-600/50">Block #${currentBlock.index + 1} (${slotTypeName})</span>`;
@@ -488,4 +739,370 @@
           dayData.blocks.forEach((b, idx) => {
             if (b.type === task.slotType) {
               const currentOccupant = dayData.tasks.find(t => t.id === b.taskId);
-              optionsHtml += `<option value="${idx}">Slot #${idx +
+              optionsHtml += `<option value="${idx}">Slot #${idx + 1} (${b.startTime}-${b.endTime})${currentOccupant ? ' [Swap]' : ''}</option>`;
+            }
+          });
+
+          item.innerHTML = `
+            <div>
+              <p class="text-xs font-semibold text-white">${task.title}</p>
+              <span class="text-[10px] text-amber-400/80">Unassigned (${task.slotType})</span>
+            </div>
+            <div class="flex items-center gap-2">
+              <select onchange="assignUnassignedTask('${task.id}', this.value)" class="bg-slate-900 border border-slate-700 text-xs text-slate-200 rounded-lg p-1.5">
+                ${optionsHtml}
+              </select>
+              <button onclick="deleteTask('${task.id}')" class="text-slate-500 hover:text-rose-400 p-1"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
+            </div>
+          `;
+          unassignedList.appendChild(item);
+        });
+      } else {
+        unassignedContainer.classList.add('hidden');
+      }
+
+      document.getElementById('timeline-progress-count').innerText = `${completedCount}/${dayData.blocks.length} Done`;
+      
+      const completedToday = dayData.tasks.filter(t => t.completed);
+      document.getElementById('completed-today-count').innerText = completedToday.length;
+      const completedList = document.getElementById('completed-today-list');
+      completedList.innerHTML = '';
+      completedToday.forEach(t => {
+        const div = document.createElement('div');
+        div.className = 'flex items-center justify-between bg-slate-800/40 border border-slate-700/40 p-2 rounded-lg text-xs';
+        div.innerHTML = `
+          <span class="line-through text-slate-400">${t.title}</span>
+          <button onclick="unmarkTaskCompleted('${t.id}')" class="text-brand-400 hover:underline">Restore</button>
+        `;
+        completedList.appendChild(div);
+      });
+
+      lucide.createIcons();
+    }
+
+    function assignUnassignedTask(taskId, blockIndexStr) {
+      if (blockIndexStr === "") return;
+      const blockIndex = parseInt(blockIndexStr, 10);
+      const dayData = appState.days[selectedViewingDateStr];
+      if (!dayData) return;
+
+      const targetBlock = dayData.blocks[blockIndex];
+      const task = dayData.tasks.find(t => t.id === taskId);
+      if (!targetBlock || !task) return;
+
+      if (targetBlock.taskId) {
+        const oldTask = dayData.tasks.find(t => t.id === targetBlock.taskId);
+        if (oldTask) oldTask.blockIndex = null;
+      }
+
+      targetBlock.taskId = task.id;
+      task.blockIndex = blockIndex;
+      saveState();
+      renderTodayView();
+      renderPlanView();
+    }
+
+    // --- PLAN SCREEN & REORDER LOGIC ---
+    function renderPlanView() {
+      const dayData = appState.days[selectedViewingDateStr];
+      const editorList = document.getElementById('editor-blocks-list');
+      editorList.innerHTML = '';
+
+      if (!dayData || !dayData.dayType) {
+        editorList.innerHTML = `<p class="text-xs text-slate-400 text-center py-6">No schedule blocks available for non-workdays.</p>`;
+        return;
+      }
+
+      dayData.blocks.forEach((block, idx) => {
+        const task = dayData.tasks.find(t => t.id === block.taskId && !t.completed);
+        const item = document.createElement('div');
+        item.className = 'bg-slate-800/70 border border-slate-700 rounded-xl p-3 flex items-center justify-between gap-3';
+
+        item.innerHTML = `
+          <div class="flex flex-col shrink-0 w-28">
+            <span class="text-xs font-mono font-bold text-slate-200">${block.startTime} - ${block.endTime}</span>
+            <span class="text-[10px] text-slate-400">${block.duration}m ${block.type}</span>
+          </div>
+          <div class="flex-1">
+            <input type="text" value="${task ? task.title : ''}" placeholder="Type task for this block..." onchange="updateBlockTaskTitle(${idx}, this.value)" class="w-full bg-slate-900 border border-slate-700/80 rounded-lg px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-brand-500">
+          </div>
+          <div class="flex items-center gap-0.5">
+            <button onclick="moveTaskInPlan(${idx}, 'up')" title="Move Up (same slot type)" class="p-1 text-slate-400 hover:text-white rounded transition"><i data-lucide="chevron-up" class="w-4 h-4"></i></button>
+            <button onclick="moveTaskInPlan(${idx}, 'down')" title="Move Down (same slot type)" class="p-1 text-slate-400 hover:text-white rounded transition"><i data-lucide="chevron-down" class="w-4 h-4"></i></button>
+            ${task ? `<button onclick="deleteTaskFromBlock(${idx})" title="Clear task" class="p-1.5 text-slate-400 hover:text-rose-400 rounded transition ml-1"><i data-lucide="trash-2" class="w-4 h-4"></i></button>` : ''}
+          </div>
+        `;
+        editorList.appendChild(item);
+      });
+      lucide.createIcons();
+    }
+
+    function moveTaskInPlan(blockIndex, direction) {
+      const dayData = appState.days[selectedViewingDateStr];
+      if (!dayData) return;
+      
+      const currentBlock = dayData.blocks[blockIndex];
+      if (!currentBlock || !currentBlock.taskId) return;
+
+      const slotType = currentBlock.type;
+      const sameTypeBlocks = dayData.blocks.filter(b => b.type === slotType);
+      const currentSubIdx = sameTypeBlocks.findIndex(b => b.index === blockIndex);
+
+      if (currentSubIdx === -1) return;
+
+      const targetSubIdx = direction === 'up' ? currentSubIdx - 1 : currentSubIdx + 1;
+      if (targetSubIdx < 0 || targetSubIdx >= sameTypeBlocks.length) return;
+
+      const targetBlock = sameTypeBlocks[targetSubIdx];
+
+      // Swap task IDs
+      const tId1 = currentBlock.taskId;
+      const tId2 = targetBlock.taskId;
+
+      currentBlock.taskId = tId2;
+      targetBlock.taskId = tId1;
+
+      // Re-sync blockIndex on all tasks
+      dayData.tasks.forEach(t => t.blockIndex = null);
+      dayData.blocks.forEach(b => {
+        if (b.taskId) {
+          const taskObj = dayData.tasks.find(t => t.id === b.taskId);
+          if (taskObj) taskObj.blockIndex = b.index;
+        }
+      });
+
+      saveState();
+      renderTodayView();
+      renderPlanView();
+    }
+
+    function updateBlockTaskTitle(blockIndex, newTitle) {
+      const dayData = appState.days[selectedViewingDateStr];
+      if (!dayData) return;
+      const block = dayData.blocks[blockIndex];
+      if (!block) return;
+
+      const trimmed = newTitle.trim();
+      if (!trimmed) {
+        if (block.taskId) {
+          const oldTask = dayData.tasks.find(t => t.id === block.taskId);
+          if (oldTask) oldTask.blockIndex = null;
+          block.taskId = null;
+        }
+      } else {
+        if (block.taskId) {
+          const task = dayData.tasks.find(t => t.id === block.taskId);
+          if (task) task.title = trimmed;
+        } else {
+          const newTask = {
+            id: generateId(),
+            title: trimmed,
+            type: 'oneoff',
+            slotType: block.type,
+            originDate: selectedViewingDateStr,
+            completed: false,
+            completedAt: null,
+            recurringDay: null,
+            blockIndex: blockIndex
+          };
+          dayData.tasks.push(newTask);
+          block.taskId = newTask.id;
+        }
+      }
+      saveState();
+      renderTodayView();
+      renderPlanView();
+    }
+
+    function deleteTaskFromBlock(blockIndex) {
+      const dayData = appState.days[selectedViewingDateStr];
+      if (!dayData) return;
+      const block = dayData.blocks[blockIndex];
+      if (!block || !block.taskId) return;
+
+      const taskIndex = dayData.tasks.findIndex(t => t.id === block.taskId);
+      if (taskIndex !== -1) {
+        dayData.tasks.splice(taskIndex, 1);
+      }
+      block.taskId = null;
+      saveState();
+      renderTodayView();
+      renderPlanView();
+    }
+
+    function deleteTask(taskId) {
+      const dayData = appState.days[selectedViewingDateStr];
+      if (!dayData) return;
+      dayData.tasks = dayData.tasks.filter(t => t.id !== taskId);
+      dayData.blocks.forEach(b => {
+        if (b.taskId === taskId) b.taskId = null;
+      });
+      saveState();
+      renderTodayView();
+      renderPlanView();
+    }
+
+    function renderTemplatesView() {
+      const dayType = appState.activeTemplateTab;
+      const templateTasks = appState.templates[dayType] || [];
+      const blockDefs = SCHEDULE_DEFINITIONS[dayType];
+
+      document.getElementById('template-day-heading').innerText = `${dayType.toUpperCase()} Focus & Break Template Slots`;
+      document.getElementById('template-time-range').innerText = `${blockDefs[0].start} - ${blockDefs[blockDefs.length - 1].end}`;
+
+      const slotsContainer = document.getElementById('template-slots-list');
+      slotsContainer.innerHTML = '';
+
+      blockDefs.forEach((def, idx) => {
+        const val = templateTasks[idx] || '';
+        const row = document.createElement('div');
+        row.className = 'flex items-center gap-2 bg-slate-900/60 p-2 rounded-xl border border-slate-700/50';
+        row.innerHTML = `
+          <div class="w-28 shrink-0">
+            <span class="text-[11px] font-mono text-slate-300">${def.start}-${def.end}</span>
+            <span class="text-[9px] block text-slate-500 uppercase">${def.type}</span>
+          </div>
+          <input type="text" value="${val}" placeholder="Template task..." onchange="updateTemplateTask('${dayType}', ${idx}, this.value)" class="flex-1 bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1 text-xs text-white focus:outline-none focus:border-brand-500">
+        `;
+        slotsContainer.appendChild(row);
+      });
+    }
+
+    function updateTemplateTask(dayType, index, value) {
+      if (!appState.templates[dayType]) appState.templates[dayType] = [];
+      appState.templates[dayType][index] = value;
+      saveState();
+    }
+
+    function renderCompletedView() {
+      const archiveContainer = document.getElementById('completed-archive-list');
+      archiveContainer.innerHTML = '';
+
+      let allCompletedTasks = [];
+      Object.keys(appState.days).forEach(dateStr => {
+        const d = appState.days[dateStr];
+        d.tasks.forEach(t => {
+          if (t.completed) {
+            allCompletedTasks.push({ ...t, date: dateStr });
+          }
+        });
+      });
+
+      if (allCompletedTasks.length === 0) {
+        archiveContainer.innerHTML = `<p class="text-xs text-slate-400 text-center py-8">No completed tasks archived yet.</p>`;
+        return;
+      }
+
+      const grouped = {};
+      allCompletedTasks.forEach(t => {
+        if (!grouped[t.date]) grouped[t.date] = [];
+        grouped[t.date].push(t);
+      });
+
+      Object.keys(grouped).sort().reverse().forEach(dateStr => {
+        const groupEl = document.createElement('div');
+        groupEl.className = 'bg-slate-800/50 border border-slate-700/60 rounded-xl p-3 space-y-2';
+        
+        let tasksHtml = '';
+        grouped[dateStr].forEach(t => {
+          tasksHtml += `
+            <div class="flex items-center justify-between text-xs py-1 border-b border-slate-700/40 last:border-0">
+              <span class="line-through text-slate-400">${t.title}</span>
+              <button onclick="unmarkTaskCompleted('${t.id}')" class="text-brand-400 hover:underline text-[11px]">Restore</button>
+            </div>
+          `;
+        });
+
+        groupEl.innerHTML = `
+          <div class="flex items-center justify-between text-xs font-bold text-slate-300 pb-1 border-b border-slate-700">
+            <span>${dateStr}</span>
+            <span class="text-[10px] text-slate-500">${grouped[dateStr].length} completed</span>
+          </div>
+          <div class="space-y-1">${tasksHtml}</div>
+        `;
+        archiveContainer.appendChild(groupEl);
+      });
+    }
+
+    function clearCompletedHistory() {
+      if (!confirm("Are you sure you want to clear all completed task history?")) return;
+      
+      Object.keys(appState.days).forEach(dateStr => {
+        const day = appState.days[dateStr];
+        day.tasks = day.tasks.filter(t => !t.completed);
+      });
+
+      saveState();
+      renderTodayView();
+      renderPlanView();
+      renderCompletedView();
+    }
+
+    // --- NAVIGATION & UI WIRING ---
+    function switchTab(tabId) {
+      document.querySelectorAll('.tab-screen').forEach(s => s.classList.add('hidden'));
+      document.getElementById(tabId).classList.remove('hidden');
+
+      document.querySelectorAll('.nav-item').forEach(btn => {
+        btn.classList.remove('text-brand-400');
+        btn.classList.add('text-slate-400');
+      });
+      const activeNav = document.querySelector(`[data-tab="${tabId}"]`);
+      if (activeNav) {
+        activeNav.classList.remove('text-slate-400');
+        activeNav.classList.add('text-brand-400');
+      }
+
+      if (tabId === 'tab-today') renderTodayView();
+      if (tabId === 'tab-plan') renderPlanView();
+      if (tabId === 'tab-templates') renderTemplatesView();
+      if (tabId === 'tab-completed') renderCompletedView();
+    }
+
+    document.querySelectorAll('.nav-item').forEach(btn => {
+      btn.addEventListener('click', () => switchTab(btn.getAttribute('data-tab')));
+    });
+
+    document.querySelectorAll('.btn-template-tab').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        document.querySelectorAll('.btn-template-tab').forEach(b => b.classList.remove('active', 'bg-brand-600', 'text-white'));
+        e.target.classList.add('active', 'bg-brand-600', 'text-white');
+        appState.activeTemplateTab = e.target.getAttribute('data-template-day');
+        renderTemplatesView();
+      });
+    });
+
+    document.getElementById('btn-clear-history').addEventListener('click', clearCompletedHistory);
+    document.getElementById('btn-reset-data').addEventListener('click', () => {
+      if (confirm("Reset application data and templates to defaults?")) {
+        localStorage.removeItem('focus_planner_pwa_data_v1');
+        appState = {
+          templates: JSON.parse(JSON.stringify(DEFAULT_TEMPLATES)),
+          days: {},
+          lastProcessedDate: null,
+          activeTemplateTab: 'mon'
+        };
+        initCurrentSchedule();
+        renderHeader();
+        renderTodayView();
+        alert("Planner data reset successfully!");
+      }
+    });
+
+    document.getElementById('btn-toggle-completed-today').addEventListener('click', () => {
+      const list = document.getElementById('completed-today-list');
+      const chevron = document.getElementById('icon-chevron-completed');
+      list.classList.toggle('hidden');
+      chevron.style.transform = list.classList.contains('hidden') ? 'rotate(0deg)' : 'rotate(180deg)';
+    });
+
+    window.addEventListener('DOMContentLoaded', () => {
+      initCurrentSchedule();
+      renderHeader();
+      renderTodayView();
+      document.querySelector('[data-template-day="mon"]').classList.add('bg-brand-600', 'text-white');
+      lucide.createIcons();
+    });
+  </script>
+</body>
+</html>
