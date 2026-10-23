@@ -1,4 +1,4 @@
-/ <!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en" class="h-full bg-slate-900 text-slate-100">
 <head>
   <meta charset="UTF-8">
@@ -92,7 +92,7 @@
         <i data-lucide="plus" class="w-4 h-4"></i>
         <span>Add Task</span>
       </button>
-      <button id="btn-[reset]-data" title="Reset sample data" class="p-2 text-slate-400 hover:text-slate-200 hover:bg-slate-700/50 rounded-lg transition">
+      <button id="btn-reset-data" title="Reset sample data" class="p-2 text-slate-400 hover:text-slate-200 hover:bg-slate-700/50 rounded-lg transition">
         <i data-lucide="rotate-ccw" class="w-4 h-4"></i>
       </button>
     </div>
@@ -323,7 +323,6 @@
   <!-- JavaScript Logic -->
   <script>
     // --- DATA SPECIFICATION & CONSTANTS ---
-    // Includes both 35m Focus Blocks and 15m Break Slots
     const SCHEDULE_DEFINITIONS = {
       mon: [
         { start: "09:00", end: "09:35", label: "09:00 - 09:35", duration: 35, type: "focus" },
@@ -414,7 +413,7 @@
     // State Variables
     let appState = {
       templates: JSON.parse(JSON.stringify(DEFAULT_TEMPLATES)),
-      days: {}, // Keyed by YYYY-MM-DD
+      days: {}, 
       lastProcessedDate: null,
       activeTemplateTab: 'mon'
     };
@@ -435,7 +434,7 @@
     }
 
     function getWorkdayType(dateObj) {
-      const dayNum = dateObj.getDay(); // 0:Sun, 1:Mon, 2:Tue, 3:Wed, 4:Thu, 5:Fri, 6:Sat
+      const dayNum = dateObj.getDay(); 
       if (dayNum === 1) return 'mon';
       if (dayNum === 3) return 'wed';
       if (dayNum === 5) return 'fri';
@@ -512,34 +511,7 @@
         taskId: null
       }));
 
-      let carriedTasks = [];
-      const prevDate = getPrevWorkdayDate(targetDate);
-      const prevDateStr = getFormattedDateStr(prevDate);
-      
-      if (appState.days[prevDateStr]) {
-        const prevDay = appState.days[prevDateStr];
-        const unfinished = prevDay.tasks.filter(t => !t.completed);
-        unfinished.forEach(task => {
-          // Identify slot type of origin block if available (defaulting to 'focus')
-          let targetSlotType = task.slotType || 'focus';
-          if (task.blockIndex !== null && prevDay.blocks[task.blockIndex]) {
-            targetSlotType = prevDay.blocks[task.blockIndex].type;
-          }
-
-          carriedTasks.push({
-            id: generateId(),
-            title: task.title,
-            type: 'carried',
-            slotType: targetSlotType, // 'focus' (35m) or 'break' (15m)
-            originDate: task.originDate || prevDateStr,
-            completed: false,
-            completedAt: null,
-            recurringDay: null,
-            blockIndex: null
-          });
-        });
-      }
-
+      // FIX 1: Template tasks take priority. Build template tasks first.
       const templateTasks = appState.templates[dayType] || [];
       const todayTasks = [];
 
@@ -560,35 +532,54 @@
         }
       });
 
-      // Strict matching assignment logic: Assign tasks to matching duration blocks
-      const allDayTasks = [...carriedTasks, ...todayTasks];
-
-      // Reset block assignments
-      allDayTasks.forEach(t => t.blockIndex = null);
-
-      // 1. Assign template & carried focus tasks to focus blocks
-      const focusTasks = allDayTasks.filter(t => t.slotType === 'focus' || !t.slotType);
-      const focusBlocks = blocks.filter(b => b.type === 'focus');
-
-      focusTasks.forEach((task, idx) => {
-        if (idx < focusBlocks.length) {
-          const targetBlock = focusBlocks[idx];
-          task.blockIndex = targetBlock.index;
-          targetBlock.taskId = task.id;
+      // Bind template tasks directly to their corresponding template block slots first
+      todayTasks.forEach(task => {
+        if (task.blockIndex !== null && blocks[task.blockIndex]) {
+          blocks[task.blockIndex].taskId = task.id;
         }
       });
 
-      // 2. Assign break tasks to break blocks
-      const breakTasks = allDayTasks.filter(t => t.slotType === 'break');
-      const breakBlocks = blocks.filter(b => b.type === 'break');
+      // Gather unfinished carried-over tasks from previous active workday
+      let carriedTasks = [];
+      const prevDate = getPrevWorkdayDate(targetDate);
+      const prevDateStr = getFormattedDateStr(prevDate);
+      
+      if (appState.days[prevDateStr]) {
+        const prevDay = appState.days[prevDateStr];
+        const unfinished = prevDay.tasks.filter(t => !t.completed);
+        unfinished.forEach(task => {
+          let targetSlotType = task.slotType || 'focus';
+          if (task.blockIndex !== null && prevDay.blocks[task.blockIndex]) {
+            targetSlotType = prevDay.blocks[task.blockIndex].type;
+          }
 
-      breakTasks.forEach((task, idx) => {
-        if (idx < breakBlocks.length) {
-          const targetBlock = breakBlocks[idx];
-          task.blockIndex = targetBlock.index;
-          targetBlock.taskId = task.id;
+          carriedTasks.push({
+            id: generateId(),
+            title: task.title,
+            type: 'carried',
+            slotType: targetSlotType, 
+            originDate: task.originDate || prevDateStr,
+            completed: false,
+            completedAt: null,
+            recurringDay: null,
+            blockIndex: null // Starts unassigned/overflow if slots are full
+          });
+        });
+      }
+
+      // FIX 2: Overflow and carried tasks fill remaining empty slots of matching slotType (or stay unassigned)
+      carriedTasks.forEach(carriedTask => {
+        // Find first empty block of matching slotType
+        const matchingEmptyBlock = blocks.find(b => b.type === carriedTask.slotType && b.taskId === null);
+        if (matchingEmptyBlock) {
+          matchingEmptyBlock.taskId = carriedTask.id;
+          carriedTask.blockIndex = matchingEmptyBlock.index;
+        } else {
+          carriedTask.blockIndex = null; // Stays unassigned in overflow backlog
         }
       });
+
+      const allDayTasks = [...todayTasks, ...carriedTasks];
 
       appState.days[targetDateStr] = {
         date: targetDateStr,
@@ -614,7 +605,6 @@
         task.completed = true;
         task.completedAt = new Date().toISOString();
 
-        // Release the block slot so it shows as open/unassigned
         if (task.blockIndex !== null && dayData.blocks[task.blockIndex]) {
           if (dayData.blocks[task.blockIndex].taskId === taskId) {
             dayData.blocks[task.blockIndex].taskId = null;
@@ -639,7 +629,6 @@
         task.completed = false;
         task.completedAt = null;
 
-        // Try to re-assign back to original block index if it's currently empty
         if (task.blockIndex !== null && dayData.blocks[task.blockIndex]) {
           const targetBlock = dayData.blocks[task.blockIndex];
           if (!targetBlock.taskId) {
@@ -654,7 +643,6 @@
       }
     }
 
-    // Initialize application state for today
     function initCurrentSchedule() {
       loadState();
       const today = new Date();
@@ -662,7 +650,6 @@
       const dayType = getWorkdayType(today);
 
       if (!dayType) {
-        // If today is weekend/non-workday, find next workday to show default schedule
         const nextWorkday = getNextWorkdayDate(today);
         selectedViewingDateStr = getFormattedDateStr(nextWorkday);
         document.getElementById('non-workday-banner').classList.remove('hidden');
@@ -676,7 +663,6 @@
     }
 
     // --- RENDER FUNCTIONS ---
-
     function renderHeader() {
       const curDate = parseDateStr(selectedViewingDateStr);
       const dayType = getWorkdayType(curDate);
@@ -725,149 +711,142 @@
         liveTime.innerText = `${currentBlock.startTime} - ${currentBlock.endTime} (${currentBlock.duration}m)`;
 
         const slotTypeName = currentBlock.type === 'break' ? '15m Break' : '35m Focus Block';
-
-        if (activeBlockIndex !== -1) {
-          liveBadge.innerHTML = `<span class="w-2 h-2 rounded-full ${currentBlock.type === 'break' ? 'bg-amber-400' : 'bg-emerald-400'} animate-pulse"></span> Active ${slotTypeName}`;
-          
-          const [endH, endM] = currentBlock.endTime.split(':').map(Number);
-          const endDate = new Date();
-          endDate.setHours(endH, endM, 0);
-          const diffMs = endDate - now;
-          if (diffMs > 0) {
-            const minsLeft = Math.floor(diffMs / 60000);
-            const secsLeft = Math.floor((diffMs % 60000) / 1000);
-            countdownTimer.innerText = `${minsLeft}m ${secsLeft}s left`;
-          } else {
-            countdownTimer.innerText = `Ending`;
-          }
-        } else {
-          liveBadge.innerHTML = `<span class="w-2 h-2 rounded-full bg-brand-400"></span> Block #${(currentBlock.index || 0) + 1} (${slotTypeName})`;
-          countdownTimer.innerText = `Scheduled`;
-        }
+        liveTaskTypeTag.innerHTML = `<span class="text-[10px] text-slate-300 bg-slate-700/60 px-2 py-0.5 rounded border border-slate-600/50">Block #${currentBlock.index + 1} (${slotTypeName})</span>`;
 
         if (currentTask) {
           liveTaskTitle.innerText = currentTask.title;
-          liveTaskSub.innerText = `Assigned to ${currentBlock.startTime} - ${currentBlock.endTime} (${slotTypeName})`;
+          liveTaskSub.innerText = currentTask.type === 'carried' ? 'Carried over from prior workday' : (currentTask.type === 'recurring' ? 'Scheduled recurring template task' : 'One-off custom task');
           btnCompleteLive.disabled = false;
           btnCompleteLive.onclick = () => markTaskCompleted(currentTask.id);
-
-          let badgeColor = 'bg-brand-500/20 text-brand-300 border-brand-500/30';
-          let typeName = 'Recurring';
-          if (currentTask.type === 'carried') {
-            badgeColor = 'bg-amber-500/20 text-amber-300 border-amber-500/30';
-            typeName = 'Carried Over';
-          } else if (currentTask.type === 'oneoff') {
-            badgeColor = 'bg-purple-500/20 text-purple-300 border-purple-500/30';
-            typeName = 'One-Off Task';
-          }
-
-          liveTaskTypeTag.innerHTML = `<span class="text-[10px] px-2 py-0.5 rounded border ${badgeColor}">${typeName}</span>`;
         } else {
-          liveTaskTitle.innerText = currentBlock.type === 'break' ? "15-Minute Break Slot" : "No Task Assigned";
-          liveTaskSub.innerText = currentBlock.type === 'break' ? "Take a rest or schedule a quick break task." : "This block slot is currently open.";
+          liveTaskTitle.innerText = "No Task Assigned";
+          liveTaskSub.innerText = "This block slot is currently empty.";
           btnCompleteLive.disabled = true;
-          liveTaskTypeTag.innerHTML = `<span class="text-[10px] text-slate-500 bg-slate-800 px-2 py-0.5 rounded">Unassigned</span>`;
+          btnCompleteLive.onclick = null;
+        }
+
+        if (isViewingToday && activeBlockIndex !== -1) {
+          liveBadge.innerHTML = `<span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span> Current Block`;
+          countdownTimer.innerText = `${slotTypeName}`;
+        } else {
+          liveBadge.innerHTML = `<span class="w-2 h-2 rounded-full bg-slate-400"></span> First Block / Preview`;
+          countdownTimer.innerText = slotTypeName;
         }
       }
 
-      const todayBlocksList = document.getElementById('today-blocks-list');
-      todayBlocksList.innerHTML = '';
-
+      // Render upcoming blocks list
+      const blocksListContainer = document.getElementById('today-blocks-list');
+      blocksListContainer.innerHTML = '';
       let completedCount = 0;
+      let totalActiveCount = 0;
 
-      dayData.blocks.forEach((block, idx) => {
+      dayData.blocks.forEach((block) => {
         const task = dayData.tasks.find(t => t.id === block.taskId);
+        if (task) totalActiveCount++;
         if (task && task.completed) completedCount++;
 
-        const isCurrent = idx === activeBlockIndex;
-        const isBreak = block.type === 'break';
+        const isCurrent = isViewingToday && block.index === activeBlockIndex;
+        const taskHtml = task ? `
+          <div class="flex items-center justify-between py-1">
+            <span class="text-sm ${task.completed ? 'line-through text-slate-500' : 'text-slate-200 font-medium'}">${task.title}</span>
+            <button onclick="${task.completed ? `unmarkTaskCompleted('${task.id}')` : `markTaskCompleted('${task.id}')`}" class="text-xs px-2.5 py-1 rounded-lg border ${task.completed ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400' : 'bg-slate-700/50 hover:bg-slate-700 border-slate-600 text-slate-300'} transition">
+              ${task.completed ? '✓ Done' : 'Complete'}
+            </button>
+          </div>
+        ` : `<span class="text-xs text-slate-500 italic">Empty slot</span>`;
 
         const blockEl = document.createElement('div');
-        blockEl.className = `p-3 rounded-xl border transition-all flex items-center justify-between ${
-          isCurrent 
-            ? 'bg-slate-800/90 border-brand-500/60 shadow-lg ring-1 ring-brand-500/30' 
-            : isBreak
-            ? 'bg-slate-800/20 border-slate-800/80 hover:bg-slate-800/40'
-            : 'bg-slate-800/40 border-slate-700/50 hover:bg-slate-800/70'
-        }`;
-
-        let taskContent = `<span class="text-xs text-slate-500 italic">${isBreak ? '15m Break (Empty)' : 'Empty 35m Block'}</span>`;
-        let checkBtn = '';
-
-        if (task) {
-          if (task.completed) {
-            taskContent = `<span class="text-xs text-slate-400 line-through">${task.title}</span>`;
-            checkBtn = `<button onclick="unmarkTaskCompleted('${task.id}')" class="p-1 text-emerald-400 hover:text-slate-400"><i data-lucide="check-square" class="w-4 h-4"></i></button>`;
-          } else {
-            taskContent = `<span class="text-xs font-semibold text-slate-200">${task.title}</span>`;
-            checkBtn = `<button onclick="markTaskCompleted('${task.id}')" class="p-1 text-slate-500 hover:text-emerald-400"><i data-lucide="square" class="w-4 h-4"></i></button>`;
-          }
-        }
-
-        const durationTag = isBreak 
-          ? `<span class="text-[9px] bg-amber-500/10 text-amber-300 border border-amber-500/20 px-1.5 py-0.5 rounded shrink-0">15m Break</span>` 
-          : `<span class="text-[9px] bg-brand-500/10 text-brand-300 border border-brand-500/20 px-1.5 py-0.5 rounded shrink-0">35m Focus</span>`;
-
+        blockEl.className = `p-3 rounded-xl border transition-all ${isCurrent ? 'bg-brand-500/10 border-brand-500/50 shadow-md' : 'bg-slate-800/60 border-slate-700/60'}`;
         blockEl.innerHTML = `
-          <div class="flex items-center gap-2.5">
-            <span class="text-[11px] font-mono text-slate-400 bg-slate-900/60 px-2 py-1 rounded border border-slate-700/40 shrink-0">${block.startTime}</span>
-            ${durationTag}
-            <div>
-              ${taskContent}
-            </div>
+          <div class="flex items-center justify-between mb-1">
+            <span class="text-[11px] font-mono ${isCurrent ? 'text-brand-400 font-bold' : 'text-slate-400'}">${block.startTime} - ${block.endTime} (${block.duration}m)</span>
+            <span class="text-[10px] px-1.5 py-0.5 rounded ${block.type === 'break' ? 'bg-indigo-500/20 text-indigo-300' : 'bg-slate-700 text-slate-400'}">${block.type}</span>
           </div>
-          <div class="flex items-center gap-1">
-            ${checkBtn}
-          </div>
+          ${taskHtml}
         `;
-        todayBlocksList.appendChild(blockEl);
+        blocksListContainer.appendChild(blockEl);
       });
 
-      document.getElementById('timeline-progress-count').innerText = `${completedCount}/${dayData.blocks.length} Done`;
-
-      const unassignedTasks = dayData.tasks.filter(t => t.blockIndex === null && !t.completed);
-      const backlogContainer = document.getElementById('unassigned-backlog-container');
-      const backlogList = document.getElementById('unassigned-task-list');
+      // FIX 2: Render unassigned / overflow backlog container
+      const unassignedContainer = document.getElementById('unassigned-backlog-container');
+      const unassignedList = document.getElementById('unassigned-task-list');
+      const unassignedTasks = dayData.tasks.filter(t => !t.completed && t.blockIndex === null);
 
       if (unassignedTasks.length > 0) {
-        backlogContainer.classList.remove('hidden');
-        backlogList.innerHTML = '';
+        unassignedContainer.classList.remove('hidden');
+        unassignedList.innerHTML = '';
         unassignedTasks.forEach(task => {
           const item = document.createElement('div');
-          item.className = 'p-2.5 bg-amber-500/10 border border-amber-500/20 rounded-xl flex items-center justify-between text-xs';
+          item.className = 'bg-slate-800 border border-amber-500/30 rounded-xl p-3 flex items-center justify-between';
+          
+          // Dropdown options for assignment
+          let optionsHtml = `<option value="">Assign to slot...</option>`;
+          dayData.blocks.forEach((b, idx) => {
+            if (b.type === task.slotType) {
+              const currentOccupant = dayData.tasks.find(t => t.id === b.taskId);
+              optionsHtml += `<option value="${idx}">Slot #${idx + 1} (${b.startTime}-${b.endTime})${currentOccupant ? ' [Swap]' : ''}</option>`;
+            }
+          });
+
           item.innerHTML = `
-            <div class="flex items-center gap-2">
-              <i data-lucide="alert-circle" class="w-3.5 h-3.5 text-amber-400"></i>
-              <span class="text-amber-200 font-medium">${task.title}</span>
+            <div>
+              <p class="text-xs font-semibold text-white">${task.title}</p>
+              <span class="text-[10px] text-amber-400/80">Unassigned (${task.slotType})</span>
             </div>
-            <button onclick="markTaskCompleted('${task.id}')" class="p-1 text-slate-400 hover:text-emerald-400"><i data-lucide="check-circle" class="w-4 h-4"></i></button>
+            <div class="flex items-center gap-2">
+              <select onchange="assignUnassignedTask('${task.id}', this.value)" class="bg-slate-900 border border-slate-700 text-xs text-slate-200 rounded-lg p-1.5">
+                ${optionsHtml}
+              </select>
+              <button onclick="deleteTask('${task.id}')" class="text-slate-500 hover:text-rose-400 p-1"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
+            </div>
           `;
-          backlogList.appendChild(item);
+          unassignedList.appendChild(item);
         });
       } else {
-        backlogContainer.classList.add('hidden');
+        unassignedContainer.classList.add('hidden');
       }
 
-      const completedTodayList = document.getElementById('completed-today-list');
-      const completedTodayTasks = dayData.tasks.filter(t => t.completed);
-      document.getElementById('completed-today-count').innerText = completedTodayTasks.length;
-
-      completedTodayList.innerHTML = '';
-      if (completedTodayTasks.length === 0) {
-        completedTodayList.innerHTML = `<p class="text-[11px] text-slate-500 italic p-2 text-center">No tasks completed yet today.</p>`;
-      } else {
-        completedTodayTasks.forEach(task => {
-          const item = document.createElement('div');
-          item.className = 'p-2 bg-slate-800/30 border border-slate-700/30 rounded-lg flex items-center justify-between text-xs';
-          item.innerHTML = `
-            <span class="text-slate-400 line-through">${task.title}</span>
-            <button onclick="unmarkTaskCompleted('${task.id}')" class="text-[10px] text-brand-400 hover:underline">Restore</button>
-          `;
-          completedTodayList.appendChild(item);
-        });
-      }
+      document.getElementById('timeline-progress-count').innerText = `${completedCount}/${dayData.blocks.length} Done`;
+      
+      // Render completed today items
+      const completedToday = dayData.tasks.filter(t => t.completed);
+      document.getElementById('completed-today-count').innerText = completedToday.length;
+      const completedList = document.getElementById('completed-today-list');
+      completedList.innerHTML = '';
+      completedToday.forEach(t => {
+        const div = document.createElement('div');
+        div.className = 'flex items-center justify-between bg-slate-800/40 border border-slate-700/40 p-2 rounded-lg text-xs';
+        div.innerHTML = `
+          <span class="line-through text-slate-400">${t.title}</span>
+          <button onclick="unmarkTaskCompleted('${t.id}')" class="text-brand-400 hover:underline">Restore</button>
+        `;
+        completedList.appendChild(div);
+      });
 
       lucide.createIcons();
+    }
+
+    function assignUnassignedTask(taskId, blockIndexStr) {
+      if (blockIndexStr === "") return;
+      const blockIndex = parseInt(blockIndexStr, 10);
+      const dayData = appState.days[selectedViewingDateStr];
+      if (!dayData) return;
+
+      const targetBlock = dayData.blocks[blockIndex];
+      const task = dayData.tasks.find(t => t.id === taskId);
+      if (!targetBlock || !task) return;
+
+      // If block already has a task, unassign old task to overflow
+      if (targetBlock.taskId) {
+        const oldTask = dayData.tasks.find(t => t.id === targetBlock.taskId);
+        if (oldTask) oldTask.blockIndex = null;
+      }
+
+      targetBlock.taskId = task.id;
+      task.blockIndex = blockIndex;
+      saveState();
+      renderTodayView();
+      renderPlanView();
     }
 
     function renderPlanView() {
@@ -876,374 +855,234 @@
       editorList.innerHTML = '';
 
       if (!dayData || !dayData.dayType) {
-        editorList.innerHTML = `<p class="text-xs text-slate-400 p-4 text-center">No schedule available on non-workdays.</p>`;
+        editorList.innerHTML = `<p class="text-xs text-slate-400 text-center py-6">No schedule blocks available for non-workdays.</p>`;
         return;
       }
 
       dayData.blocks.forEach((block, idx) => {
-        const task = dayData.tasks.find(t => t.id === block.taskId);
-        const card = document.createElement('div');
-        const isBreak = block.type === 'break';
+        const task = dayData.tasks.find(t => t.id === block.taskId && !t.completed);
+        const item = document.createElement('div');
+        item.className = 'bg-slate-800/70 border border-slate-700 rounded-xl p-3 flex items-center justify-between gap-3';
 
-        card.className = `border rounded-xl p-3 flex items-center justify-between gap-2 shadow-sm ${
-          isBreak ? 'bg-slate-800/30 border-amber-500/20' : 'bg-slate-800/60 border-slate-700/70'
-        }`;
-        card.dataset.blockIndex = idx;
-
-        let taskTitle = task ? task.title : '';
-        const durationTag = isBreak ? '15m' : '35m';
-
-        card.innerHTML = `
-          <div class="flex items-center gap-2 flex-1">
-            <i data-lucide="grip-vertical" class="w-4 h-4 text-slate-500 cursor-grab shrink-0"></i>
-            <span class="text-xs font-mono ${isBreak ? 'text-amber-400 bg-amber-500/10 border-amber-500/20' : 'text-brand-400 bg-brand-500/10 border-brand-500/20'} px-1.5 py-0.5 rounded border shrink-0">${block.startTime} (${durationTag})</span>
-            <input type="text" value="${escapeHtml(taskTitle)}" placeholder="${isBreak ? '15m break task...' : '35m focus task...'}" 
-              oninput="updateBlockTaskTitle(${idx}, this.value)"
-              onchange="updateBlockTaskTitle(${idx}, this.value)"
-              class="w-full bg-slate-900/80 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-100 focus:outline-none focus:border-brand-500 transition">
+        item.innerHTML = `
+          <div class="flex flex-col shrink-0 w-28">
+            <span class="text-xs font-mono font-bold text-slate-200">${block.startTime} - ${block.endTime}</span>
+            <span class="text-[10px] text-slate-400">${block.duration}m ${block.type}</span>
           </div>
-          <div class="flex items-center gap-1 shrink-0">
-            <button onclick="shiftTaskPosition(${idx}, -1)" title="Move Up" class="p-1 hover:bg-slate-700 rounded text-slate-400 hover:text-white"><i data-lucide="arrow-up" class="w-3.5 h-3.5"></i></button>
-            <button onclick="shiftTaskPosition(${idx}, 1)" title="Move Down" class="p-1 hover:bg-slate-700 rounded text-slate-400 hover:text-white"><i data-lucide="arrow-down" class="w-3.5 h-3.5"></i></button>
-            ${task ? `<button onclick="deleteTaskFromBlock(${idx})" class="p-1 hover:bg-rose-500/20 rounded text-slate-500 hover:text-rose-400"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i></button>` : ''}
+          <div class="flex-1">
+            <input type="text" value="${task ? task.title : ''}" placeholder="Type task for this block..." onchange="updateBlockTaskTitle(${idx}, this.value)" class="w-full bg-slate-900 border border-slate-700/80 rounded-lg px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-brand-500">
+          </div>
+          <div class="flex items-center gap-1">
+            ${task ? `<button onclick="deleteTaskFromBlock(${idx})" title="Clear task" class="p-1.5 text-slate-400 hover:text-rose-400 rounded transition"><i data-lucide="trash-2" class="w-4 h-4"></i></button>` : ''}
           </div>
         `;
-
-        editorList.appendChild(card);
+        editorList.appendChild(item);
       });
-
       lucide.createIcons();
-    }
-
-    function renderTemplatesView() {
-      const currentDay = appState.activeTemplateTab;
-      const heading = document.getElementById('template-day-heading');
-      const timeRange = document.getElementById('template-time-range');
-      const slotsList = document.getElementById('template-slots-list');
-
-      const fullNames = { mon: 'Monday Template', wed: 'Wednesday Template', fri: 'Friday Template' };
-      const ranges = { mon: '09:00 - 13:45', wed: '09:00 - 16:15', fri: '09:00 - 16:15' };
-
-      heading.innerText = fullNames[currentDay];
-      timeRange.innerText = ranges[currentDay];
-
-      const tasks = appState.templates[currentDay] || [];
-      const definitions = SCHEDULE_DEFINITIONS[currentDay];
-
-      slotsList.innerHTML = '';
-      definitions.forEach((def, idx) => {
-        const val = tasks[idx] || '';
-        const isBreak = def.type === 'break';
-        const row = document.createElement('div');
-        row.className = 'flex items-center gap-2';
-
-        const tagClass = isBreak ? 'text-amber-400 bg-amber-500/10 border-amber-500/30' : 'text-brand-400 bg-brand-500/10 border-brand-500/30';
-
-        row.innerHTML = `
-          <span class="text-xs font-mono bg-slate-900 px-2 py-1.5 rounded border border-slate-700/60 shrink-0 w-32 text-center flex items-center justify-between">
-            <span>${def.start}</span>
-            <span class="text-[9px] px-1 rounded border ${tagClass}">${def.duration}m</span>
-          </span>
-          <input type="text" value="${escapeHtml(val)}" placeholder="${isBreak ? '15m break task...' : '35m focus task...'}" 
-            onchange="updateTemplateTask('${currentDay}', ${idx}, this.value)"
-            class="flex-1 bg-slate-900 border border-slate-700/80 rounded-xl px-3 py-1.5 text-xs text-white focus:outline-none focus:border-brand-500 transition">
-        `;
-        slotsList.appendChild(row);
-      });
-    }
-
-    function renderCompletedView() {
-      const archiveList = document.getElementById('completed-archive-list');
-      archiveList.innerHTML = '';
-
-      // Collect all completed tasks across all days
-      let completedByDate = [];
-
-      Object.keys(appState.days).forEach(dateStr => {
-        const day = appState.days[dateStr];
-        const completed = day.tasks.filter(t => t.completed);
-        if (completed.length > 0) {
-          completedByDate.push({
-            dateStr: dateStr,
-            tasks: completed
-          });
-        }
-      });
-
-      completedByDate.sort((a, b) => b.dateStr.localeCompare(a.dateStr));
-
-      if (completedByDate.length === 0) {
-        archiveList.innerHTML = `
-          <div class="text-center py-10 text-slate-500 space-y-2">
-            <i data-lucide="check-circle-2" class="w-8 h-8 mx-auto text-slate-600"></i>
-            <p class="text-xs">No completed tasks in history yet.</p>
-          </div>
-        `;
-        lucide.createIcons();
-        return;
-      }
-
-      completedByDate.forEach(group => {
-        const dateObj = parseDateStr(group.dateStr);
-        const groupEl = document.createElement('div');
-        groupEl.className = 'bg-slate-800/40 border border-slate-700/50 rounded-2xl p-3.5 space-y-2';
-
-        let itemsHtml = group.tasks.map(t => `
-          <div class="flex items-center justify-between text-xs py-1 border-b border-slate-700/30 last:border-0">
-            <span class="text-slate-300 line-through">${escapeHtml(t.title)}</span>
-            <span class="text-[10px] text-slate-500">${t.type}</span>
-          </div>
-        `).join('');
-
-        groupEl.innerHTML = `
-          <div class="flex items-center justify-between text-xs font-bold text-brand-400 border-b border-slate-700/50 pb-1.5">
-            <span>${dateObj.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}</span>
-            <span class="text-[10px] bg-emerald-500/20 text-emerald-300 px-2 py-0.5 rounded-full">${group.tasks.length} Completed</span>
-          </div>
-          <div class="pt-1">${itemsHtml}</div>
-        `;
-
-        archiveList.appendChild(groupEl);
-      });
-
-      lucide.createIcons();
-    }
-
-    // Escape helper
-    function escapeHtml(str) {
-      return (str || '').replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
-    }
-
-    // --- ACTIONS & HANDLERS ---
-    function shiftTaskPosition(blockIndex, direction) {
-      const dayData = appState.days[selectedViewingDateStr];
-      if (!dayData) return;
-
-      const curBlock = dayData.blocks[blockIndex];
-      if (!curBlock) return;
-
-      // Find adjacent block of the SAME type (focus -> focus or break -> break)
-      let targetIndex = -1;
-      if (direction < 0) {
-        for (let i = blockIndex - 1; i >= 0; i--) {
-          if (dayData.blocks[i].type === curBlock.type) {
-            targetIndex = i;
-            break;
-          }
-        }
-      } else {
-        for (let i = blockIndex + 1; i < dayData.blocks.length; i++) {
-          if (dayData.blocks[i].type === curBlock.type) {
-            targetIndex = i;
-            break;
-          }
-        }
-      }
-
-      if (targetIndex === -1) return;
-
-      const targetBlock = dayData.blocks[targetIndex];
-
-      // Swap taskId assignments
-      const tempId = curBlock.taskId;
-      curBlock.taskId = targetBlock.taskId;
-      targetBlock.taskId = tempId;
-
-      // Sync task blockIndex properties
-      if (curBlock.taskId) {
-        const t1 = dayData.tasks.find(t => t.id === curBlock.taskId);
-        if (t1) {
-          t1.blockIndex = blockIndex;
-          t1.slotType = curBlock.type;
-        }
-      }
-      if (targetBlock.taskId) {
-        const t2 = dayData.tasks.find(t => t.id === targetBlock.taskId);
-        if (t2) {
-          t2.blockIndex = targetIndex;
-          t2.slotType = targetBlock.type;
-        }
-      }
-
-      saveState();
-      renderPlanView();
-      renderTodayView();
-    }
-
-    function updateTemplateTask(dayType, slotIndex, title) {
-      appState.templates[dayType][slotIndex] = title;
-      saveState();
     }
 
     function updateBlockTaskTitle(blockIndex, newTitle) {
       const dayData = appState.days[selectedViewingDateStr];
-      if (!dayData || !dayData.blocks[blockIndex]) return;
-
+      if (!dayData) return;
       const block = dayData.blocks[blockIndex];
-      const trimmedTitle = newTitle.trim();
+      if (!block) return;
 
-      if (block.taskId) {
-        const task = dayData.tasks.find(t => t.id === block.taskId);
-        if (task) {
-          if (trimmedTitle) {
-            task.title = trimmedTitle;
-          } else {
-            // Remove task if input is cleared
-            dayData.tasks = dayData.tasks.filter(t => t.id !== block.taskId);
-            block.taskId = null;
-          }
+      const trimmed = newTitle.trim();
+      if (!trimmed) {
+        if (block.taskId) {
+          const oldTask = dayData.tasks.find(t => t.id === block.taskId);
+          if (oldTask) oldTask.blockIndex = null;
+          block.taskId = null;
         }
-      } else if (trimmedTitle) {
-        // Create new task for block if none existed
-        const newTask = {
-          id: generateId(),
-          title: trimmedTitle,
-          type: 'oneoff',
-          slotType: block.type,
-          originDate: selectedViewingDateStr,
-          completed: false,
-          completedAt: null,
-          recurringDay: null,
-          blockIndex: blockIndex
-        };
-        dayData.tasks.push(newTask);
-        block.taskId = newTask.id;
+      } else {
+        if (block.taskId) {
+          const task = dayData.tasks.find(t => t.id === block.taskId);
+          if (task) task.title = trimmed;
+        } else {
+          const newTask = {
+            id: generateId(),
+            title: trimmed,
+            type: 'oneoff',
+            slotType: block.type,
+            originDate: selectedViewingDateStr,
+            completed: false,
+            completedAt: null,
+            recurringDay: null,
+            blockIndex: blockIndex
+          };
+          dayData.tasks.push(newTask);
+          block.taskId = newTask.id;
+        }
       }
-
       saveState();
       renderTodayView();
+      renderPlanView();
     }
 
     function deleteTaskFromBlock(blockIndex) {
       const dayData = appState.days[selectedViewingDateStr];
-      if (!dayData || !dayData.blocks[blockIndex]) return;
-
+      if (!dayData) return;
       const block = dayData.blocks[blockIndex];
-      if (block.taskId) {
-        dayData.tasks = dayData.tasks.filter(t => t.id !== block.taskId);
-        block.taskId = null;
-        saveState();
-        renderPlanView();
-        renderTodayView();
+      if (!block || !block.taskId) return;
+
+      const taskIndex = dayData.tasks.findIndex(t => t.id === block.taskId);
+      if (taskIndex !== -1) {
+        dayData.tasks.splice(taskIndex, 1);
       }
+      block.taskId = null;
+      saveState();
+      renderTodayView();
+      renderPlanView();
     }
 
-    // --- NAVIGATION TABS ENGINE ---
-    function setupNavigation() {
-      const navButtons = document.querySelectorAll('.nav-item');
-      const screens = document.querySelectorAll('.tab-screen');
+    function deleteTask(taskId) {
+      const dayData = appState.days[selectedViewingDateStr];
+      if (!dayData) return;
+      dayData.tasks = dayData.tasks.filter(t => t.id !== taskId);
+      dayData.blocks.forEach(b => {
+        if (b.taskId === taskId) b.taskId = null;
+      });
+      saveState();
+      renderTodayView();
+      renderPlanView();
+    }
 
-      navButtons.forEach(btn => {
-        btn.addEventListener('click', () => {
-          const targetTab = btn.dataset.tab;
+    function renderTemplatesView() {
+      const dayType = appState.activeTemplateTab;
+      const templateTasks = appState.templates[dayType] || [];
+      const blockDefs = SCHEDULE_DEFINITIONS[dayType];
 
-          screens.forEach(s => s.classList.add('hidden'));
-          document.getElementById(targetTab).classList.remove('hidden');
+      document.getElementById('template-day-heading').innerText = `${dayType.toUpperCase()} Focus & Break Template Slots`;
+      document.getElementById('template-time-range').innerText = `${blockDefs[0].start} - ${blockDefs[blockDefs.length - 1].end}`;
 
-          navButtons.forEach(b => {
-            b.classList.remove('text-brand-400');
-            b.classList.add('text-slate-400');
-          });
-          btn.classList.remove('text-slate-400');
-          btn.classList.add('text-brand-400');
+      const slotsContainer = document.getElementById('template-slots-list');
+      slotsContainer.innerHTML = '';
 
-          // Trigger view renders on tab change
-          if (targetTab === 'tab-today') renderTodayView();
-          if (targetTab === 'tab-plan') renderPlanView();
-          if (targetTab === 'tab-templates') renderTemplatesView();
-          if (targetTab === 'tab-completed') renderCompletedView();
+      blockDefs.forEach((def, idx) => {
+        const val = templateTasks[idx] || '';
+        const row = document.createElement('div');
+        row.className = 'flex items-center gap-2 bg-slate-900/60 p-2 rounded-xl border border-slate-700/50';
+        row.innerHTML = `
+          <div class="w-28 shrink-0">
+            <span class="text-[11px] font-mono text-slate-300">${def.start}-${def.end}</span>
+            <span class="text-[9px] block text-slate-500 uppercase">${def.type}</span>
+          </div>
+          <input type="text" value="${val}" placeholder="Template task..." onchange="updateTemplateTask('${dayType}', ${idx}, this.value)" class="flex-1 bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1 text-xs text-white focus:outline-none focus:border-brand-500">
+        `;
+        slotsContainer.appendChild(row);
+      });
+    }
+
+    function updateTemplateTask(dayType, index, value) {
+      if (!appState.templates[dayType]) appState.templates[dayType] = [];
+      appState.templates[dayType][index] = value;
+      saveState();
+    }
+
+    function renderCompletedView() {
+      const archiveContainer = document.getElementById('completed-archive-list');
+      archiveContainer.innerHTML = '';
+
+      let allCompletedTasks = [];
+      Object.keys(appState.days).forEach(dateStr => {
+        const d = appState.days[dateStr];
+        d.tasks.forEach(t => {
+          if (t.completed) {
+            allCompletedTasks.push({ ...t, date: dateStr });
+          }
         });
       });
 
-      // Template Tabs
-      const templateTabs = document.querySelectorAll('.btn-template-tab');
-      templateTabs.forEach(tab => {
-        tab.addEventListener('click', () => {
-          templateTabs.forEach(t => t.classList.remove('bg-brand-600', 'text-white'));
-          tab.classList.add('bg-brand-600', 'text-white');
-          appState.activeTemplateTab = tab.dataset.templateDay;
-          renderTemplatesView();
+      if (allCompletedTasks.length === 0) {
+        archiveContainer.innerHTML = `<p class="text-xs text-slate-400 text-center py-8">No completed tasks archived yet.</p>`;
+        return;
+      }
+
+      // Group by date
+      const grouped = {};
+      allCompletedTasks.forEach(t => {
+        if (!grouped[t.date]) grouped[t.date] = [];
+        grouped[t.date].push(t);
+      });
+
+      Object.keys(grouped).sort().reverse().forEach(dateStr => {
+        const groupEl = document.createElement('div');
+        groupEl.className = 'bg-slate-800/50 border border-slate-700/60 rounded-xl p-3 space-y-2';
+        
+        let tasksHtml = '';
+        grouped[dateStr].forEach(t => {
+          tasksHtml += `
+            <div class="flex items-center justify-between text-xs py-1 border-b border-slate-700/40 last:border-0">
+              <span class="line-through text-slate-400">${t.title}</span>
+              <button onclick="unmarkTaskCompleted('${t.id}')" class="text-brand-400 hover:underline text-[11px]">Restore</button>
+            </div>
+          `;
         });
-      });
 
-      // Default active tab styling
-      document.querySelector('[data-template-day="mon"]')?.classList.add('bg-brand-600', 'text-white');
-    }
-
-    // --- MODAL ENGINE ---
-    function setupModal() {
-      const modal = document.getElementById('modal-add-task');
-      const btnAdd = document.getElementById('btn-add-quick-task');
-      const btnAddPlan = document.getElementById('btn-add-oneoff-plan');
-      const btnClose = document.getElementById('btn-close-modal');
-      const btnCancel = document.getElementById('btn-cancel-modal');
-      const btnSave = document.getElementById('btn-save-task');
-      const selectBlock = document.getElementById('select-task-block');
-      const inputTitle = document.getElementById('input-task-title');
-
-      function openModal() {
-        const dayData = appState.days[selectedViewingDateStr];
-        selectBlock.innerHTML = `<option value="">Unassigned Backlog</option>`;
-
-        if (dayData && dayData.blocks) {
-          dayData.blocks.forEach((b, idx) => {
-            const assignedTask = dayData.tasks.find(t => t.id === b.taskId);
-            const statusStr = assignedTask ? `(${assignedTask.title})` : '(Empty)';
-            selectBlock.innerHTML += `<option value="${idx}">Block #${idx + 1} ${b.startTime} ${statusStr}</option>`;
-          });
-        }
-
-        inputTitle.value = '';
-        modal.classList.remove('hidden');
-        inputTitle.focus();
-      }
-
-      function closeModal() {
-        modal.classList.add('hidden');
-      }
-
-      btnAdd.addEventListener('click', openModal);
-      btnAddPlan?.addEventListener('click', openModal);
-      btnClose.addEventListener('click', closeModal);
-      btnCancel.addEventListener('click', closeModal);
-
-      btnSave.addEventListener('click', () => {
-        const title = inputTitle.value.trim();
-        if (!title) return;
-
-        const dayData = appState.days[selectedViewingDateStr];
-        if (!dayData) return;
-
-        const selectedIdxStr = selectBlock.value;
-        const blockIdx = selectedIdxStr !== "" ? parseInt(selectedIdxStr, 10) : null;
-
-        const newTask = {
-          id: generateId(),
-          title: title,
-          type: 'oneoff',
-          originDate: selectedViewingDateStr,
-          completed: false,
-          completedAt: null,
-          recurringDay: null,
-          blockIndex: blockIdx
-        };
-
-        dayData.tasks.push(newTask);
-
-        if (blockIdx !== null && dayData.blocks[blockIdx]) {
-          dayData.blocks[blockIdx].taskId = newTask.id;
-        }
-
-        saveState();
-        closeModal();
-        renderTodayView();
-        renderPlanView();
+        groupEl.innerHTML = `
+          <div class="flex items-center justify-between text-xs font-bold text-slate-300 pb-1 border-b border-slate-700">
+            <span>${dateStr}</span>
+            <span class="text-[10px] text-slate-500">${grouped[dateStr].length} completed</span>
+          </div>
+          <div class="space-y-1">${tasksHtml}</div>
+        `;
+        archiveContainer.appendChild(groupEl);
       });
     }
 
-    // Reset Data Helper for user convenience
-    document.getElementById('btn-[reset]-data')?.addEventListener('click', () => {
-      if (confirm('Reset planner back to default sample templates and state?')) {
+    // FIX 3: Clear History completely deletes all completed status tasks from all days and localStorage
+    function clearCompletedHistory() {
+      if (!confirm("Are you sure you want to clear all completed task history?")) return;
+      
+      Object.keys(appState.days).forEach(dateStr => {
+        const day = appState.days[dateStr];
+        day.tasks = day.tasks.filter(t => !t.completed);
+      });
+
+      saveState();
+      renderTodayView();
+      renderPlanView();
+      renderCompletedView();
+    }
+
+    // --- NAVIGATION & UI WIRING ---
+    function switchTab(tabId) {
+      document.querySelectorAll('.tab-screen').forEach(s => s.classList.add('hidden'));
+      document.getElementById(tabId).classList.remove('hidden');
+
+      document.querySelectorAll('.nav-item').forEach(btn => {
+        btn.classList.remove('text-brand-400');
+        btn.classList.add('text-slate-400');
+      });
+      const activeNav = document.querySelector(`[data-tab="${tabId}"]`);
+      if (activeNav) {
+        activeNav.classList.remove('text-slate-400');
+        activeNav.classList.add('text-brand-400');
+      }
+
+      if (tabId === 'tab-today') renderTodayView();
+      if (tabId === 'tab-plan') renderPlanView();
+      if (tabId === 'tab-templates') renderTemplatesView();
+      if (tabId === 'tab-completed') renderCompletedView();
+    }
+
+    document.querySelectorAll('.nav-item').forEach(btn => {
+      btn.addEventListener('click', () => switchTab(btn.getAttribute('data-tab')));
+    });
+
+    // Template Tab Switcher
+    document.querySelectorAll('.btn-template-tab').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        document.querySelectorAll('.btn-template-tab').forEach(b => b.classList.remove('active', 'bg-brand-600', 'text-white'));
+        e.target.classList.add('active', 'bg-brand-600', 'text-white');
+        appState.activeTemplateTab = e.target.getAttribute('data-template-day');
+        renderTemplatesView();
+      });
+    });
+
+    document.getElementById('btn-clear-history').addEventListener('click', clearCompletedHistory);
+    document.getElementById('btn-reset-data').addEventListener('click', () => {
+      if (confirm("Reset application data and templates to defaults?")) {
         localStorage.removeItem('focus_planner_pwa_data_v1');
         appState = {
           templates: JSON.parse(JSON.stringify(DEFAULT_TEMPLATES)),
@@ -1254,40 +1093,26 @@
         initCurrentSchedule();
         renderHeader();
         renderTodayView();
+        alert("Planner data reset successfully!");
       }
     });
 
-    // Toggle completed today list
-    document.getElementById('btn-toggle-completed-today')?.addEventListener('click', () => {
+    // Toggle completed today section collapse
+    document.getElementById('btn-toggle-completed-today').addEventListener('click', () => {
       const list = document.getElementById('completed-today-list');
-      const icon = document.getElementById('icon-chevron-completed');
+      const chevron = document.getElementById('icon-chevron-completed');
       list.classList.toggle('hidden');
-      icon.classList.toggle('rotate-180');
+      chevron.style.transform = list.classList.contains('hidden') ? 'rotate(0deg)' : 'rotate(180deg)';
     });
 
-    // Jump to next workday on banner click
-    document.getElementById('btn-jump-today')?.addEventListener('click', () => {
-      const nextDate = getNextWorkdayDate(new Date());
-      selectedViewingDateStr = getFormattedDateStr(nextDate);
-      ensureDayInstantiated(selectedViewingDateStr);
-      renderHeader();
-      renderTodayView();
-    });
-
-    // --- INITIALIZATION ---
+    // Initial load
     window.addEventListener('DOMContentLoaded', () => {
       initCurrentSchedule();
-      setupNavigation();
-      setupModal();
       renderHeader();
       renderTodayView();
-
-      // Realtime tick every 10 seconds to update block live timer
-      setInterval(() => {
-        renderTodayView();
-      }, 10000);
+      document.querySelector('[data-template-day="mon"]').classList.add('bg-brand-600', 'text-white');
+      lucide.createIcons();
     });
-
   </script>
 </body>
 </html>
