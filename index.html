@@ -53,10 +53,6 @@
       background: rgba(51, 65, 85, 0.8);
       border-radius: 9999px;
     }
-    .draggable-ghost {
-      opacity: 0.4;
-      border: 2px dashed #38bdf8;
-    }
   </style>
 </head>
 <body class="h-full flex flex-col overflow-hidden font-sans antialiased select-none bg-slate-900 text-slate-100">
@@ -88,10 +84,6 @@
     </div>
     
     <div class="flex items-center gap-1.5">
-      <button id="btn-add-quick-task" class="flex items-center gap-1 bg-brand-600 hover:bg-brand-500 text-white text-xs font-semibold px-3 py-2 rounded-lg transition shadow-sm active:scale-95">
-        <i data-lucide="plus" class="w-4 h-4"></i>
-        <span>Add Task</span>
-      </button>
       <button id="btn-reset-data" title="Reset sample data" class="p-2 text-slate-400 hover:text-slate-200 hover:bg-slate-700/50 rounded-lg transition">
         <i data-lucide="rotate-ccw" class="w-4 h-4"></i>
       </button>
@@ -107,7 +99,7 @@
     <button id="btn-jump-today" class="text-xs bg-amber-500/20 hover:bg-amber-500/30 text-amber-200 px-2 py-0.5 rounded border border-amber-500/30 underline font-medium">View Next</button>
   </div>
 
-  <!-- Content Containers (Tab Screens) -->
+  <!-- Main Screens Container -->
   <main class="flex-1 overflow-y-auto relative pb-20">
 
     <!-- TAB 1: TODAY / FOCUS VIEW -->
@@ -144,10 +136,10 @@
         </div>
       </div>
 
-      <!-- Upcoming Blocks Schedule List -->
+      <!-- Schedule List -->
       <div class="space-y-2">
         <div class="flex items-center justify-between px-1">
-          <h3 class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Today's Focus & Break Timeline</h3>
+          <h3 class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Today's Timeline</h3>
           <span id="timeline-progress-count" class="text-[11px] text-slate-500">0/0 Done</span>
         </div>
 
@@ -163,26 +155,10 @@
             <i data-lucide="arrow-right-left" class="w-3.5 h-3.5"></i>
             <span>Overflow & Carried Tasks</span>
           </h3>
-          <span class="text-[11px] text-slate-400">Drag or tap to assign</span>
+          <span class="text-[11px] text-slate-400">Select slot to assign</span>
         </div>
         <div id="unassigned-task-list" class="space-y-2">
           <!-- Overflow tasks -->
-        </div>
-      </div>
-
-      <!-- Completed Today Collapse View -->
-      <div id="completed-today-section" class="pt-2">
-        <button id="btn-toggle-completed-today" class="w-full flex items-center justify-between py-2 px-3 bg-slate-800/40 hover:bg-slate-800/80 rounded-xl text-xs text-slate-400 transition border border-slate-700/40">
-          <span class="flex items-center gap-2">
-            <i data-lucide="check-square" class="w-4 h-4 text-emerald-400"></i>
-            <span class="font-medium text-slate-300">Completed Today</span>
-            <span id="completed-today-count" class="bg-emerald-500/20 text-emerald-400 px-1.5 py-0.2 rounded-full text-[10px]">0</span>
-          </span>
-          <i id="icon-chevron-completed" data-lucide="chevron-down" class="w-4 h-4 transition-transform duration-200"></i>
-        </button>
-
-        <div id="completed-today-list" class="mt-2 space-y-1.5 hidden">
-          <!-- Dynamic Completed Items -->
         </div>
       </div>
 
@@ -193,14 +169,13 @@
       <div class="flex items-center justify-between">
         <div>
           <h2 class="text-base font-bold text-white">Daily Schedule Editor</h2>
-          <p class="text-xs text-slate-400">Reorder tasks across 35-min focus blocks & 15-min breaks</p>
+          <p class="text-xs text-slate-400">Edit and reorder tasks across focus and break slots</p>
         </div>
       </div>
 
-      <!-- Instructions -->
       <div class="bg-slate-800/40 border border-slate-700/50 rounded-xl p-3 text-xs text-slate-300 flex items-start gap-2">
         <i data-lucide="arrow-up-down" class="w-4 h-4 text-brand-400 shrink-0 mt-0.5"></i>
-        <span>Use the Up and Down arrows to reorder tasks within their respective slot types (focus tasks move between focus blocks, break tasks move between break blocks).</span>
+        <span>Use Up/Down arrows to move tasks within matching block types (35m focus with focus, 15m break with break).</span>
       </div>
 
       <!-- Editable Block List -->
@@ -213,17 +188,15 @@
     <section id="tab-templates" class="tab-screen hidden p-4 space-y-4 max-w-lg mx-auto">
       <div>
         <h2 class="text-base font-bold text-white">Recurring Workday Templates</h2>
-        <p class="text-xs text-slate-400">Define tasks for 35m focus blocks and 15m break intervals.</p>
+        <p class="text-xs text-slate-400">Define default recurring tasks for Monday, Wednesday, and Friday.</p>
       </div>
 
-      <!-- Day Switcher Tabs -->
       <div class="flex bg-slate-800 p-1 rounded-xl border border-slate-700/60">
         <button data-template-day="mon" class="btn-template-tab flex-1 py-1.5 text-xs font-semibold rounded-lg text-slate-400 transition active">Monday</button>
         <button data-template-day="wed" class="btn-template-tab flex-1 py-1.5 text-xs font-semibold rounded-lg text-slate-400 transition">Wednesday</button>
         <button data-template-day="fri" class="btn-template-tab flex-1 py-1.5 text-xs font-semibold rounded-lg text-slate-400 transition">Friday</button>
       </div>
 
-      <!-- Selected Template Card List -->
       <div class="bg-slate-800/60 border border-slate-700/80 rounded-2xl p-3.5 space-y-3">
         <div class="flex items-center justify-between pb-2 border-b border-slate-700/60">
           <span id="template-day-heading" class="text-xs font-bold text-slate-200 uppercase tracking-wider">Monday Focus & Break Slots</span>
@@ -241,7 +214,7 @@
       <div class="flex items-center justify-between">
         <div>
           <h2 class="text-base font-bold text-white">Completed History</h2>
-          <p class="text-xs text-slate-400">Archive log of all completed focus tasks</p>
+          <p class="text-xs text-slate-400">Archive log of all completed tasks</p>
         </div>
         <button id="btn-clear-history" class="text-xs text-rose-400 hover:text-rose-300 hover:bg-rose-500/10 px-2.5 py-1 rounded border border-rose-500/20 transition">
           Clear History
@@ -255,7 +228,7 @@
 
   </main>
 
-  <!-- Navigation Bar -->
+  <!-- Bottom Navigation Bar -->
   <nav class="fixed bottom-0 left-0 right-0 bg-slate-900/95 backdrop-blur-md border-t border-slate-800 px-2 py-2 z-40">
     <div class="max-w-lg mx-auto flex justify-around items-center">
       
@@ -284,7 +257,6 @@
 
   <!-- JavaScript Logic -->
   <script>
-    // --- DATA SPECIFICATION & CONSTANTS ---
     const SCHEDULE_DEFINITIONS = {
       mon: [
         { start: "09:00", end: "09:35", label: "09:00 - 09:35", duration: 35, type: "focus" },
@@ -381,7 +353,6 @@
 
     let selectedViewingDateStr = getFormattedDateStr(new Date());
 
-    // --- UTILITY FUNCTIONS ---
     function getFormattedDateStr(dateObj) {
       const year = dateObj.getFullYear();
       const month = String(dateObj.getMonth() + 1).padStart(2, '0');
@@ -424,7 +395,6 @@
       return 'task_' + Math.random().toString(36).substr(2, 9);
     }
 
-    // --- LOCAL STORAGE MANAGER ---
     function loadState() {
       const saved = localStorage.getItem('focus_planner_pwa_data_v1');
       if (saved) {
@@ -440,7 +410,6 @@
       localStorage.setItem('focus_planner_pwa_data_v1', JSON.stringify(appState));
     }
 
-    // --- CARRY-OVER & SCHEDULE GENERATOR ---
     function ensureDayInstantiated(targetDateStr) {
       const targetDate = parseDateStr(targetDateStr);
       const dayType = getWorkdayType(targetDate);
@@ -472,7 +441,7 @@
         taskId: null
       }));
 
-      // Template tasks take priority
+      // Template tasks priority
       const templateTasks = appState.templates[dayType] || [];
       const todayTasks = [];
 
@@ -551,7 +520,7 @@
       return appState.days[targetDateStr];
     }
 
-    // --- TASK COMPLETION ENGINE ---
+    // --- OPTION A: PINNED HISTORY TASK COMPLETION LOGIC ---
     function markTaskCompleted(taskId) {
       if (!taskId) return;
       
@@ -562,12 +531,8 @@
       if (task) {
         task.completed = true;
         task.completedAt = new Date().toISOString();
-
-        if (task.blockIndex !== null && dayData.blocks[task.blockIndex]) {
-          if (dayData.blocks[task.blockIndex].taskId === taskId) {
-            dayData.blocks[task.blockIndex].taskId = null;
-          }
-        }
+        // Crucial for Option A: Do NOT set block.taskId to null.
+        // Task remains pinned inside its original block slot!
 
         saveState();
         renderTodayView();
@@ -586,13 +551,6 @@
       if (task) {
         task.completed = false;
         task.completedAt = null;
-
-        if (task.blockIndex !== null && dayData.blocks[task.blockIndex]) {
-          const targetBlock = dayData.blocks[task.blockIndex];
-          if (!targetBlock.taskId) {
-            targetBlock.taskId = task.id;
-          }
-        }
 
         saveState();
         renderTodayView();
@@ -620,7 +578,6 @@
       ensureDayInstantiated(selectedViewingDateStr);
     }
 
-    // --- RENDER FUNCTIONS ---
     function renderHeader() {
       const curDate = parseDateStr(selectedViewingDateStr);
       const dayType = getWorkdayType(curDate);
@@ -665,7 +622,7 @@
       if (!currentBlock && dayData.blocks.length > 0) currentBlock = dayData.blocks[0];
 
       if (currentBlock) {
-        const currentTask = dayData.tasks.find(t => t.id === currentBlock.taskId && !t.completed);
+        const currentTask = dayData.tasks.find(t => t.id === currentBlock.taskId);
         liveTime.innerText = `${currentBlock.startTime} - ${currentBlock.endTime} (${currentBlock.duration}m)`;
 
         const slotTypeName = currentBlock.type === 'break' ? '15m Break' : '35m Focus Block';
@@ -673,8 +630,12 @@
 
         if (currentTask) {
           liveTaskTitle.innerText = currentTask.title;
-          liveTaskSub.innerText = currentTask.type === 'carried' ? 'Carried over from prior workday' : (currentTask.type === 'recurring' ? 'Scheduled recurring template task' : 'One-off custom task');
-          btnCompleteLive.disabled = false;
+          liveTaskSub.innerText = currentTask.completed 
+            ? '✓ Task Completed' 
+            : (currentTask.type === 'carried' ? 'Carried over from prior workday' : (currentTask.type === 'recurring' ? 'Scheduled recurring template task' : 'One-off custom task'));
+          
+          btnCompleteLive.disabled = currentTask.completed;
+          btnCompleteLive.innerHTML = currentTask.completed ? `<i data-lucide="check-circle-2" class="w-4 h-4"></i><span>Completed</span>` : `<i data-lucide="check-circle-2" class="w-4 h-4"></i><span>Mark Complete</span>`;
           btnCompleteLive.onclick = () => markTaskCompleted(currentTask.id);
         } else {
           liveTaskTitle.innerText = "No Task Assigned";
@@ -685,14 +646,14 @@
 
         if (isViewingToday && activeBlockIndex !== -1) {
           liveBadge.innerHTML = `<span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span> Current Block`;
-          countdownTimer.innerText = `${slotTypeName}`;
+          countdownTimer.innerText = slotTypeName;
         } else {
           liveBadge.innerHTML = `<span class="w-2 h-2 rounded-full bg-slate-400"></span> First Block / Preview`;
           countdownTimer.innerText = slotTypeName;
         }
       }
 
-      // Render upcoming blocks list
+      // Render upcoming & past blocks list (Option A: Pinned History)
       const blocksListContainer = document.getElementById('today-blocks-list');
       blocksListContainer.innerHTML = '';
       let completedCount = 0;
@@ -704,8 +665,8 @@
         const isCurrent = isViewingToday && block.index === activeBlockIndex;
         const taskHtml = task ? `
           <div class="flex items-center justify-between py-1">
-            <span class="text-sm ${task.completed ? 'line-through text-slate-500' : 'text-slate-200 font-medium'}">${task.title}</span>
-            <button onclick="${task.completed ? `unmarkTaskCompleted('${task.id}')` : `markTaskCompleted('${task.id}')`}" class="text-xs px-2.5 py-1 rounded-lg border ${task.completed ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400' : 'bg-slate-700/50 hover:bg-slate-700 border-slate-600 text-slate-300'} transition">
+            <span class="text-sm ${task.completed ? 'line-through text-slate-500 font-normal' : 'text-slate-200 font-medium'}">${task.title}</span>
+            <button onclick="${task.completed ? `unmarkTaskCompleted('${task.id}')` : `markTaskCompleted('${task.id}')`}" class="text-xs px-2.5 py-1 rounded-lg border ${task.completed ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400 font-semibold' : 'bg-slate-700/50 hover:bg-slate-700 border-slate-600 text-slate-300'} transition">
               ${task.completed ? '✓ Done' : 'Complete'}
             </button>
           </div>
@@ -762,20 +723,6 @@
       }
 
       document.getElementById('timeline-progress-count').innerText = `${completedCount}/${dayData.blocks.length} Done`;
-      
-      const completedToday = dayData.tasks.filter(t => t.completed);
-      document.getElementById('completed-today-count').innerText = completedToday.length;
-      const completedList = document.getElementById('completed-today-list');
-      completedList.innerHTML = '';
-      completedToday.forEach(t => {
-        const div = document.createElement('div');
-        div.className = 'flex items-center justify-between bg-slate-800/40 border border-slate-700/40 p-2 rounded-lg text-xs';
-        div.innerHTML = `
-          <span class="line-through text-slate-400">${t.title}</span>
-          <button onclick="unmarkTaskCompleted('${t.id}')" class="text-brand-400 hover:underline">Restore</button>
-        `;
-        completedList.appendChild(div);
-      });
 
       lucide.createIcons();
     }
@@ -802,7 +749,7 @@
       renderPlanView();
     }
 
-    // --- PLAN SCREEN & REORDER LOGIC ---
+    // --- PLAN VIEW ---
     function renderPlanView() {
       const dayData = appState.days[selectedViewingDateStr];
       const editorList = document.getElementById('editor-blocks-list');
@@ -814,7 +761,7 @@
       }
 
       dayData.blocks.forEach((block, idx) => {
-        const task = dayData.tasks.find(t => t.id === block.taskId && !t.completed);
+        const task = dayData.tasks.find(t => t.id === block.taskId);
         const item = document.createElement('div');
         item.className = 'bg-slate-800/70 border border-slate-700 rounded-xl p-3 flex items-center justify-between gap-3';
 
@@ -824,7 +771,7 @@
             <span class="text-[10px] text-slate-400">${block.duration}m ${block.type}</span>
           </div>
           <div class="flex-1">
-            <input type="text" value="${task ? task.title : ''}" placeholder="Type task for this block..." onchange="updateBlockTaskTitle(${idx}, this.value)" class="w-full bg-slate-900 border border-slate-700/80 rounded-lg px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-brand-500">
+            <input type="text" value="${task ? task.title : ''}" placeholder="Type task for this block..." onchange="updateBlockTaskTitle(${idx}, this.value)" class="w-full bg-slate-900 border border-slate-700/80 rounded-lg px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-brand-500 ${task && task.completed ? 'line-through text-slate-500' : ''}">
           </div>
           <div class="flex items-center gap-0.5">
             <button onclick="moveTaskInPlan(${idx}, 'up')" title="Move Up (same slot type)" class="p-1 text-slate-400 hover:text-white rounded transition"><i data-lucide="chevron-up" class="w-4 h-4"></i></button>
@@ -855,14 +802,12 @@
 
       const targetBlock = sameTypeBlocks[targetSubIdx];
 
-      // Swap task IDs
       const tId1 = currentBlock.taskId;
       const tId2 = targetBlock.taskId;
 
       currentBlock.taskId = tId2;
       targetBlock.taskId = tId1;
 
-      // Re-sync blockIndex on all tasks
       dayData.tasks.forEach(t => t.blockIndex = null);
       dayData.blocks.forEach(b => {
         if (b.taskId) {
@@ -1087,13 +1032,6 @@
         renderTodayView();
         alert("Planner data reset successfully!");
       }
-    });
-
-    document.getElementById('btn-toggle-completed-today').addEventListener('click', () => {
-      const list = document.getElementById('completed-today-list');
-      const chevron = document.getElementById('icon-chevron-completed');
-      list.classList.toggle('hidden');
-      chevron.style.transform = list.classList.contains('hidden') ? 'rotate(0deg)' : 'rotate(180deg)';
     });
 
     window.addEventListener('DOMContentLoaded', () => {
